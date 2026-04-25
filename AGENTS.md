@@ -86,3 +86,18 @@ Each script is designed as a pure function (`run_X(input_path, output_path)`) fo
 Siempre que necesites documentación de una librería,
 API o framework, usa Context7 automáticamente sin
 que yo tenga que pedirlo explícitamente.
+
+## Memoria
+
+Tienes acceso a Engram para memoria persistente via
+mem_save, mem_search, mem_context, mem_session_summary.
+
+- Guarda proactivamente con mem_save después de:
+  decisiones de arquitectura, bugfixes, patrones
+  descubiertos, cambios de configuración.
+- Al iniciar sesión llama mem_context para recuperar
+  contexto previo.
+- Al terminar la sesión llama mem_session_summary —
+  esto NO es opcional.
+- Si hay compactación de contexto, llama mem_context
+  inmediatamente para recuperar el estado.
