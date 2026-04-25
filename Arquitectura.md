@@ -16,7 +16,7 @@
 7. [Infraestructura & DevOps](#7-infraestructura--devops)
 8. [Estructura del Repositorio](#8-estructura-del-repositorio)
 9. [Plan de Implementación](#9-plan-de-implementación)
-10. [Estimación de Costos](#10-estimación-de-costos-azure-openai)
+10. [Estimación de Costos](#10-estimación-de-costos-azure-ai-foundry)
 11. [Alineación con Rúbrica](#11-alineación-con-rúbrica-de-evaluación)
 12. [Decisiones de Arquitectura](#12-decisiones-de-arquitectura)
 
@@ -39,7 +39,7 @@
                                     │
                     ┌───────────────▼────────────────┐
                     │   FEATURE ENRICHMENT (LLM)      │
-                    │   Azure OpenAI GPT-4.1 mini     │
+                    │   Azure AI Foundry DeepSeek-V3.2 │
                     │                                  │
                     │  ① Embeddings Conversacionales   │
                     │  ② Extracción de Intenciones     │
@@ -80,14 +80,14 @@ Ingesta → Validación → Enrichment (LLM batch) → Feature Engineering
 
 ### Principios de Diseño
 
-| Principio | Implementación |
-|-----------|---------------|
-| **Sandbox sin restricciones regulatorias** | Datos 100% sintéticos. Sin compliance de CNBV/LFPDPPP. Libertad para APIs externas. |
-| **Cloud** | Azure for Students. Servicio principal: Azure OpenAI (GPT-4.1 mini). |
-| **Presupuesto** | $20 USD máximo para APIs de IA. |
-| **Lenguaje** | Python 3.11+ |
-| **Modularidad** | Cada etapa es un script independiente con entrada/salida clara para migrar a orquestación. |
-| **Seguridad** | Keys en `.env`. `.gitignore` cubre datos y secretos. Ejecución 100% local. |
+| Principio                                  | Implementación                                                                             |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| **Sandbox sin restricciones regulatorias** | Datos 100% sintéticos. Sin compliance de CNBV/LFPDPPP. Libertad para APIs externas.        |
+| **Cloud**                                  | Azure for Students. Servicio principal: Azure OpenAI (GPT-4.1 mini).                       |
+| **Presupuesto**                            | $20 USD máximo para APIs de IA.                                                            |
+| **Lenguaje**                               | Python 3.11+                                                                               |
+| **Modularidad**                            | Cada etapa es un script independiente con entrada/salida clara para migrar a orquestación. |
+| **Seguridad**                              | Keys en `.env`. `.gitignore` cubre datos y secretos. Ejecución 100% local.                 |
 
 ---
 
@@ -95,11 +95,11 @@ Ingesta → Validación → Enrichment (LLM batch) → Feature Engineering
 
 ### 2.1 Datasets
 
-| Dataset | Formato | Rows | Clave Primaria | FK |
-|---------|---------|------|---------------|----|
-| `hey_clientes.csv` | CSV | ~15K usuarios | `user_id` | — |
-| `hey_productos.csv` | CSV | 1:N por usuario | `producto_id` | `user_id` → `hey_clientes` |
-| `hey_transacciones.csv` | CSV | alta cardinalidad | `transaccion_id` | `user_id`, `producto_id` |
+| Dataset                          | Formato | Rows              | Clave Primaria    | FK                         |
+| -------------------------------- | ------- | ----------------- | ----------------- | -------------------------- |
+| `hey_clientes.csv`               | CSV     | ~15K usuarios     | `user_id`         | —                          |
+| `hey_productos.csv`              | CSV     | 1:N por usuario   | `producto_id`     | `user_id` → `hey_clientes` |
+| `hey_transacciones.csv`          | CSV     | alta cardinalidad | `transaccion_id`  | `user_id`, `producto_id`   |
 | `dataset_50k_anonymized.parquet` | Parquet | 50K interacciones | `conv_id` + orden | `user_id` → `hey_clientes` |
 
 ### 2.2 Relaciones
@@ -118,12 +118,12 @@ hey_productos.csv
 
 ### 2.3 Estrategia de Almacenamiento
 
-| Entorno | Formato | Justificación |
-|---------|---------|---------------|
-| **Raw** | CSV / Parquet original | Inmutables, en `data/raw/` |
-| **Processed** | Parquet comprimido (snappy) | Intermedios enriquecidos, `data/processed/` |
-| **In-Memory** | Polars DataFrame (>100K rows) / Pandas | Procesamiento vectorizado |
-| **Feature Store** | SQLite (`data/features.db`) | Feature matrix + segmentos para consultas rápidas desde Streamlit |
+| Entorno           | Formato                                | Justificación                                                     |
+| ----------------- | -------------------------------------- | ----------------------------------------------------------------- |
+| **Raw**           | CSV / Parquet original                 | Inmutables, en `data/raw/`                                        |
+| **Processed**     | Parquet comprimido (snappy)            | Intermedios enriquecidos, `data/processed/`                       |
+| **In-Memory**     | Polars DataFrame (>100K rows) / Pandas | Procesamiento vectorizado                                         |
+| **Feature Store** | SQLite (`data/features.db`)            | Feature matrix + segmentos para consultas rápidas desde Streamlit |
 
 ### 2.4 Validación de Datos (`src/data/validate.py`)
 
@@ -142,23 +142,23 @@ hey_productos.csv
 
 ## 3. Feature Enrichment Layer
 
-> **Modelo**: Azure OpenAI GPT-4.1 mini (via `AZURE_OPENAI_KEY` + `AZURE_OPENAI_ENDPOINT`).
-> **Modo**: Batch asíncrono con rate limiting (60 RPM). Structured Output (JSON mode) donde aplique.
+> **Modelo**: DeepSeek-V3.2 via Azure AI Foundry (serverless endpoint, `AZURE_INFERENCE_CREDENTIAL` + `AZURE_INFERENCE_ENDPOINT`).
+> **Modo**: Batch síncrono con rate limiting (60 RPM). Structured Output (JSON Schema) donde aplique.
 
 ### 3.1 Embeddings Conversacionales (`src/enrichment/embeddings.py`)
 
 **Objetivo**: Vectorizar la semántica de lo que cada usuario pregunta a Havi.
 
-| Parámetro | Valor |
-|-----------|-------|
-| **Modelo** | `text-embedding-3-small` |
-| **Dimensionalidad** | 1536 |
+| Parámetro                  | Valor                                                                 |
+| -------------------------- | --------------------------------------------------------------------- |
+| **Modelo** | `text-embedding-3-large` (via Azure OpenAI) |
+| **Dimensionalidad** | 3072 |
 | **Entrada** | Campo `input` de cada interacción (mensaje del usuario) |
 | **Preprocesamiento** | Concatenar mensajes del usuario por conversación en orden cronológico |
-| **Agregación por usuario** | Mean-pooling + [varianza, min, max] por dimensión → ~1560 features |
+| **Agregación por usuario** | Mean-pooling + [varianza, min, max] por dimensión → ~3120 features |
 | **Batch size** | 500 textos por llamada |
 | **Estimación tokens** | ~10M tokens totales |
-| **Costo estimado** | $0.20 USD |
+| **Costo estimado** | $1.30 USD |
 
 **Output**: `data/processed/user_embeddings.parquet` — un vector de ~1560 dimensiones por `user_id`.
 
@@ -178,14 +178,15 @@ hey_productos.csv
 }
 ```
 
-| Parámetro | Valor |
-|-----------|-------|
-| **Agrupación** | Por `conv_id`, mensajes ordenados cronológicamente |
-| **Batch** | 50 conversaciones por llamada (optimiza tokens y latencia) |
-| **Estimación tokens** | ~12M in / ~3M out |
-| **Costo estimado** | $3.60 USD |
+| Parámetro             | Valor                                                      |
+| --------------------- | ---------------------------------------------------------- |
+| **Agrupación**        | Por `conv_id`, mensajes ordenados cronológicamente         |
+| **Batch**             | 50 conversaciones por llamada (optimiza tokens y latencia) |
+| **Estimación tokens** | ~12M in / ~3M out                                          |
+| **Costo estimado**    | $3.60 USD                                                  |
 
 **Agregación por usuario**:
+
 - Conteo por tipo de intención
 - Proporción de sentimiento negativo
 - Urgencia máxima y promedio
@@ -199,6 +200,7 @@ hey_productos.csv
 **Objetivo**: Extraer información estructurada del campo `descripcion_libre` en transacciones (texto libre no estandarizado).
 
 **Prompt**:
+
 ```
 Extrae de esta descripción de transacción:
 - merchant_name: nombre del comercio
@@ -207,14 +209,15 @@ Extrae de esta descripción de transacción:
 - is_recurring: true si es pago periódico
 ```
 
-| Parámetro | Valor |
-|-----------|-------|
-| **Entrada** | `descripcion_libre` de `hey_transacciones` donde no sea nulo |
-| **Batch** | 100 descripciones por llamada |
-| **Estimación tokens** | ~5M in / ~2M out |
-| **Costo estimado** | $2.00 USD |
+| Parámetro             | Valor                                                        |
+| --------------------- | ------------------------------------------------------------ |
+| **Entrada**           | `descripcion_libre` de `hey_transacciones` donde no sea nulo |
+| **Batch**             | 100 descripciones por llamada                                |
+| **Estimación tokens** | ~5M in / ~2M out                                             |
+| **Costo estimado**    | $2.00 USD                                                    |
 
 **Agregación por usuario**:
+
 - Comercio más frecuente
 - Número de suscripciones detectadas (cruce con `cargo_recurrente`)
 - Diversidad de categorías (entropía)
@@ -240,29 +243,29 @@ basado en sus datos. Incluye:
 [Sesión de datos del usuario: demografía, productos, top transacciones, top conversaciones]
 ```
 
-| Parámetro | Valor |
-|-----------|-------|
-| **Entrada** | Datos agregados por usuario (~500 tokens cada uno) |
-| **Batch** | 25 usuarios por llamada |
-| **Estimación tokens** | ~7.5M in / ~3M out |
-| **Costo estimado** | $3.00 USD |
+| Parámetro             | Valor                                              |
+| --------------------- | -------------------------------------------------- |
+| **Entrada**           | Datos agregados por usuario (~500 tokens cada uno) |
+| **Batch**             | 25 usuarios por llamada                            |
+| **Estimación tokens** | ~7.5M in / ~3M out                                 |
+| **Costo estimado**    | $3.00 USD                                          |
 
 **Doble output**:
 
 1. **Texto narrativo** → almacenado en SQLite, usado como `system prompt` del chatbot personalizado
-2. **Embedding del perfil** (text-embedding-3-small) → feature adicional para clustering (1536 dims)
+2. **Embedding del perfil** (text-embedding-3-large, 3072 dims) → feature adicional para clustering
 
 **Output**: `data/processed/customer_dna.parquet` (texto + embedding por usuario).
 
 ### 3.5 Optimizaciones de Costo y Rendimiento
 
-| Estrategia | Detalle |
-|-----------|---------|
-| **Caché** | Embeddings cacheados por texto. Si un input ya fue procesado, no se re-consume. |
-| **Rate Limiting** | 60 RPM (Azure OpenAI Student tier). Semáforo asíncrono con `asyncio`. |
-| **Retry con backoff** | 3 reintentos con exponential backoff (1s, 2s, 4s) para rate limits. |
-| **Batching** | Máximo tokens por request: 4096 (input). Agrupar para minimizar llamadas. |
-| **JSON Mode** | Structured output en lugar de parseo libre. Reduce tokens de salida y errores. |
+| Estrategia            | Detalle                                                                         |
+| --------------------- | ------------------------------------------------------------------------------- |
+| **Caché**             | Embeddings cacheados por texto. Si un input ya fue procesado, no se re-consume. |
+| **Rate Limiting**     | 60 RPM (Azure OpenAI Student tier). Semáforo asíncrono con `asyncio`.           |
+| **Retry con backoff** | 3 reintentos con exponential backoff (1s, 2s, 4s) para rate limits.             |
+| **Batching**          | Máximo tokens por request: 4096 (input). Agrupar para minimizar llamadas.       |
+| **JSON Mode**         | Structured output en lugar de parseo libre. Reduce tokens de salida y errores.  |
 
 ---
 
@@ -270,20 +273,20 @@ basado en sus datos. Incluye:
 
 ### 4.1 Feature Matrix Final (~220 columnas)
 
-| Grupo | Features | Cardinalidad | Origen |
-|-------|----------|-------------|--------|
-| **Demográficas** | edad, genero (one-hot), estado (one-hot), nivel_educativo (ordinal), ocupacion (one-hot), ingreso_mensual_mxn, idioma_preferido | ~40 | `hey_clientes` |
-| **Engagement** | antiguedad_dias, dias_desde_ultimo_login, preferencia_canal (one-hot), satisfaccion_1_10, es_hey_pro, nomina_domiciliada, recibe_remesas, usa_hey_shop | ~10 | `hey_clientes` |
-| **Crédito** | score_buro, tiene_seguro, patron_uso_atipico | 3 | `hey_clientes` |
-| **Productos** | num_productos_activos, tipo_producto (one-hot 11), utilizacion_pct_avg, saldo_actual_total, tasa_interes_promedio, plazo_meses_promedio, monto_mensualidad_total | ~20 | `hey_productos` |
-| **Transaccionales** | frecuencia_total, frecuencia_por_categoria_mcc (one-hot 14), frecuencia_por_canal (one-hot 9), frecuencia_por_tipo_operacion (one-hot 13), monto_promedio, monto_total, hora_pico, dia_semana (one-hot 7), pct_internacional, cashback_total, intentos_promedio, pct_no_procesada, motivo_no_procesada (one-hot 8) | ~55 | `hey_transacciones` |
-| **Conversacionales** | num_conversaciones, msgs_promedio, pct_canal_voz, diversidad_interacciones | 4 | Dataset Havi |
-| **Embeddings (Havi)** | Mean-pooled vector | 1536 | §3.1 |
+| Grupo                  | Features                                                                                                                                                                                                                                                                                                           | Cardinalidad | Origen              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ | ------------------- |
+| **Demográficas**       | edad, genero (one-hot), estado (one-hot), nivel_educativo (ordinal), ocupacion (one-hot), ingreso_mensual_mxn, idioma_preferido                                                                                                                                                                                    | ~40          | `hey_clientes`      |
+| **Engagement**         | antiguedad_dias, dias_desde_ultimo_login, preferencia_canal (one-hot), satisfaccion_1_10, es_hey_pro, nomina_domiciliada, recibe_remesas, usa_hey_shop                                                                                                                                                             | ~10          | `hey_clientes`      |
+| **Crédito**            | score_buro, tiene_seguro, patron_uso_atipico                                                                                                                                                                                                                                                                       | 3            | `hey_clientes`      |
+| **Productos**          | num_productos_activos, tipo_producto (one-hot 11), utilizacion_pct_avg, saldo_actual_total, tasa_interes_promedio, plazo_meses_promedio, monto_mensualidad_total                                                                                                                                                   | ~20          | `hey_productos`     |
+| **Transaccionales**    | frecuencia_total, frecuencia_por_categoria_mcc (one-hot 14), frecuencia_por_canal (one-hot 9), frecuencia_por_tipo_operacion (one-hot 13), monto_promedio, monto_total, hora_pico, dia_semana (one-hot 7), pct_internacional, cashback_total, intentos_promedio, pct_no_procesada, motivo_no_procesada (one-hot 8) | ~55          | `hey_transacciones` |
+| **Conversacionales**   | num_conversaciones, msgs_promedio, pct_canal_voz, diversidad_interacciones                                                                                                                                                                                                                                         | 4            | Dataset Havi        |
+| **Embeddings (Havi)** | Mean-pooled vector | 3072 | §3.1 |
 | **Intenciones** | Conteo por intent (11), sentiment_avg (-1 a 1), urgency_avg, resolution_rate | 14 | §3.2 |
 | **Enriquecimiento TX** | suscripciones_detectadas, comercio_top_freq, entropia_categorias | 3 | §3.3 |
-| **Customer DNA** | Embedding del perfil narrativo | 1536 | §3.4 |
+| **Customer DNA** | Embedding del perfil narrativo | 3072 | §3.4 |
 
-> **Total estimado**: ~220 columnas para ~15,000 usuarios.
+> **Total estimado**: ~6,200 columnas para ~15,000 usuarios.
 > Los embeddings dominan dimensionalidad (>90% de features) — UMAP es crítico para reducción efectiva.
 
 ### 4.2 Pipeline de Clustering (`src/models/cluster.py`)
@@ -337,6 +340,7 @@ basado en sus datos. Incluye:
 ```
 
 **Hyperparámetros a tunear**:
+
 - `n_components` UMAP: probar [5, 8, 10, 15] — elegir el que maximice DBCV
 - `min_cluster_size` HDBSCAN: probar [50, 100, 150, 200] — balance granularidad vs. interpretabilidad
 - `metric` UMAP: probar `euclidean` vs. `cosine` para embeddings de alta dimensión
@@ -376,8 +380,8 @@ Genera:
 ## 5. Chatbot Agent Layer
 
 > **Arquitectura**: RAG híbrido sobre datos del usuario + tool calling.
-> **Modelo**: GPT-4.1 mini con streaming habilitado.
-> **Framework**: `openai` Python SDK (Azure) + Streamlit `st.write_stream()`.
+> **Modelo**: DeepSeek-V3.2 con streaming habilitado.
+> **Framework**: `azure-ai-inference` SDK + Streamlit `st.write_stream()`.
 
 ### 5.1 Arquitectura del Agente
 
@@ -398,8 +402,8 @@ Genera:
 │                                                                          │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
 │  │                    STREAMING RESPONSE                             │   │
-│  │  openai.chat.completions.create(                                  │   │
-│  │      model="gpt-4.1-mini",                                        │   │
+│  │  client.complete(                                                    │   │
+│  │      model="DeepSeek-V3.2",                                          │   │
 │  │      messages=[system, ...history, user_msg],                     │   │
 │  │      tools=[account_summary, recent_tx, recommendation],          │   │
 │  │      stream=True                                                  │   │
@@ -518,18 +522,17 @@ def get_recommendation(user_id: str) -> dict:
 
 ```python
 # src/chatbot/agent.py
-import openai
+from openai import OpenAI
 
 def chat_stream(user_id: str, messages: list, tools: list) -> Generator:
     """Generador de chunks para streaming en Streamlit."""
-    client = openai.AzureOpenAI(
-        api_key=os.environ["AZURE_OPENAI_KEY"],
-        azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-        api_version="2025-04-01-preview",
+    client = OpenAI(
+        base_url=os.environ["AZURE_CHAT_BASE_URL"],
+        api_key=os.environ["AZURE_CHAT_API_KEY"],
     )
 
     response = client.chat.completions.create(
-        model="gpt-4.1-mini",
+        model="DeepSeek-V3.2",
         messages=messages,
         tools=tools,
         tool_choice="auto",
@@ -539,7 +542,6 @@ def chat_stream(user_id: str, messages: list, tools: list) -> Generator:
     for chunk in response:
         if chunk.choices[0].delta.content:
             yield chunk.choices[0].delta.content
-        # Tool calls se acumulan y ejecutan al final del stream
 
 # src/dashboard/app.py
 import streamlit as st
@@ -625,16 +627,16 @@ src/dashboard/
 
 ### 6.3 Visualizaciones Clave
 
-| Vista | Librería | Interactividad |
-|-------|----------|----------------|
-| UMAP 2D Scatter | Plotly Express | Hover con user_id, zoom, selección |
-| Segment Treemap | Plotly | Click → drill-down |
-| Feature Importance | Altair | Bar chart con tooltip |
-| Transacciones Heatmap | Plotly | Hora × Día, escala de color monto |
-| Sankey (Categorías) | Plotly | Nodes arrastrables |
-| Sentiment Timeline | Altair | Línea con banda de confianza |
-| Radar Chart (360) | Plotly | Overlay usuario vs. segmento |
-| Chat UI | Streamlit nativo | `st.chat_input`, `st.chat_message` |
+| Vista                 | Librería         | Interactividad                     |
+| --------------------- | ---------------- | ---------------------------------- |
+| UMAP 2D Scatter       | Plotly Express   | Hover con user_id, zoom, selección |
+| Segment Treemap       | Plotly           | Click → drill-down                 |
+| Feature Importance    | Altair           | Bar chart con tooltip              |
+| Transacciones Heatmap | Plotly           | Hora × Día, escala de color monto  |
+| Sankey (Categorías)   | Plotly           | Nodes arrastrables                 |
+| Sentiment Timeline    | Altair           | Línea con banda de confianza       |
+| Radar Chart (360)     | Plotly           | Overlay usuario vs. segmento       |
+| Chat UI               | Streamlit nativo | `st.chat_input`, `st.chat_message` |
 
 ---
 
@@ -642,27 +644,27 @@ src/dashboard/
 
 ### 7.1 Stack Tecnológico
 
-| Capa | Tecnología | Versión | Justificación |
-|------|-----------|---------|---------------|
-| **Lenguaje** | Python | 3.11+ | Requisito del equipo |
-| **DataFrames** | Polars + Pandas | latest | Polars para ETL pesado, Pandas para compatibilidad con sklearn |
-| **ML** | scikit-learn, UMAP-learn, HDBSCAN | latest | Ligero, sin GPU necesaria |
-| **LLM** | Azure OpenAI | GPT-4.1 mini | Student plan, más barato que GPT-4o |
-| **Dashboard** | Streamlit | ≥1.28 | Requisito, soporte nativo de streaming |
-| **Visualización** | Plotly + Altair | latest | Interactivo, integración nativa con Streamlit |
-| **Vector Store** | FAISS (in-memory) | latest | Sin dependencia externa, rápido para ~15K vectores |
-| **Almacenamiento** | SQLite + Parquet | built-in | Volumen pequeño (~200MB total), self-contained |
-| **Orquestación actual** | Makefile | — | Scripts secuenciales |
-| **Orquestación futura** | Prefect | latest | Arquitectura lista para migrar |
-| **Entorno** | venv + pip-tools | — | Reproducible con `requirements.txt` |
+| Capa                    | Tecnología                        | Versión       | Justificación                                                  |
+| ----------------------- | --------------------------------- | ------------- | -------------------------------------------------------------- |
+| **Lenguaje**            | Python                            | 3.11+         | Requisito del equipo                                           |
+| **DataFrames**          | Polars + Pandas                   | latest        | Polars para ETL pesado, Pandas para compatibilidad con sklearn |
+| **ML**                  | scikit-learn, UMAP-learn, HDBSCAN | latest        | Ligero, sin GPU necesaria                                      |
+| **LLM** | Azure AI Foundry + Azure OpenAI | DeepSeek-V3.2 + text-embedding-3-large | Student plan, serverless + managed endpoint |
+| **Dashboard**           | Streamlit                         | ≥1.28         | Requisito, soporte nativo de streaming                         |
+| **Visualización**       | Plotly + Altair                   | latest        | Interactivo, integración nativa con Streamlit                  |
+| **Vector Store**        | FAISS (in-memory)                 | latest        | Sin dependencia externa, rápido para ~15K vectores             |
+| **Almacenamiento**      | SQLite + Parquet                  | built-in      | Volumen pequeño (~200MB total), self-contained                 |
+| **Orquestación actual** | Makefile                          | —             | Scripts secuenciales                                           |
+| **Orquestación futura** | Prefect                           | latest        | Arquitectura lista para migrar                                 |
+| **Entorno**             | venv + pip-tools                  | —             | Reproducible con `requirements.txt`                            |
 
 ### 7.2 Servicios Azure
 
-| Servicio | Uso | Costo (Student) |
-|----------|-----|-----------------|
-| **Azure OpenAI** | GPT-4.1 mini (chat + embeddings) | Pay-as-you-go por token |
-| **Azure OpenAI** | text-embedding-3-small | Pay-as-you-go por token |
-| *(Opcional)* Azure Blob Storage | Backup de datasets | Gratis (5GB LRS hot) |
+| Servicio                        | Uso                                 | Costo (Student)         |
+| ------------------------------- | ----------------------------------- | ----------------------- |
+| **Azure AI Foundry** | DeepSeek-V3.2 (chat + tool calling) | Pay-as-you-go por token |
+| **Azure OpenAI** | text-embedding-3-large (embeddings) | Pay-as-you-go por token |
+| _(Opcional)_ Azure Blob Storage | Backup de datasets                  | Gratis (5GB LRS hot)    |
 
 ### 7.3 Seguridad
 
@@ -677,10 +679,12 @@ src/dashboard/
   *.pyc
 
 .env (nunca commiteado):
-  AZURE_OPENAI_KEY=sk-...
-  AZURE_OPENAI_ENDPOINT=https://...
-  AZURE_OPENAI_DEPLOYMENT=gpt-4.1-mini
-  AZURE_EMBEDDING_DEPLOYMENT=text-embedding-3-small
+  AZURE_CHAT_API_KEY=...
+  AZURE_CHAT_BASE_URL=https://<resource>.services.ai.azure.com/openai/v1/
+  AZURE_CHAT_MODEL=DeepSeek-V3.2
+  AZURE_EMBEDDING_API_KEY=...
+  AZURE_EMBEDDING_ENDPOINT=https://<resource>.cognitiveservices.azure.com/
+  AZURE_EMBEDDING_MODEL=text-embedding-3-large
 ```
 
 > **Streamlit se ejecuta 100% local**. Las keys de Azure nunca salen del entorno.
@@ -700,9 +704,9 @@ umap-learn>=0.5
 hdbscan>=0.8
 shap>=0.42
 
-# LLM
+# LLM — Azure AI Foundry + Azure OpenAI
 openai>=1.0
-tiktoken>=0.5
+azure-core
 
 # Vector Store
 faiss-cpu>=1.7
@@ -890,17 +894,17 @@ DatathonTec2026/
 
 ### Fases y Duración Estimada
 
-| Fase | Descripción | Duración | Dependencias |
-|------|-------------|----------|-------------|
-| **Fase 1** | Data prep & validación | ~1.5h | — |
-| **Fase 2** | Enrichment batch (LLM) | ~3h | Fase 1 |
-| **Fase 3** | Feature engineering | ~1h | Fase 2 |
-| **Fase 4** | Clustering & segmentación | ~2h | Fase 3 |
-| **Fase 5** | Streamlit dashboard | ~3h | Fase 4 |
-| **Fase 6** | Chatbot streaming RAG | ~3h | Fase 4 |
-| **Fase 7** | Pitch deck & ensayo | ~2h | Fase 5+6 |
-| **Fase 8** | Makefile + polish | ~0.5h | Fase 5+6 |
-| *(Opc.)* | Migrar a Prefect | ~1h | Fase 8 |
+| Fase       | Descripción               | Duración | Dependencias |
+| ---------- | ------------------------- | -------- | ------------ |
+| **Fase 1** | Data prep & validación    | ~1.5h    | —            |
+| **Fase 2** | Enrichment batch (LLM)    | ~3h      | Fase 1       |
+| **Fase 3** | Feature engineering       | ~1h      | Fase 2       |
+| **Fase 4** | Clustering & segmentación | ~2h      | Fase 3       |
+| **Fase 5** | Streamlit dashboard       | ~3h      | Fase 4       |
+| **Fase 6** | Chatbot streaming RAG     | ~3h      | Fase 4       |
+| **Fase 7** | Pitch deck & ensayo       | ~2h      | Fase 5+6     |
+| **Fase 8** | Makefile + polish         | ~0.5h    | Fase 5+6     |
+| _(Opc.)_   | Migrar a Prefect          | ~1h      | Fase 8       |
 
 ### Detalle por Fase
 
@@ -975,70 +979,69 @@ DatathonTec2026/
 
 ---
 
-## 10. Estimación de Costos (Azure OpenAI)
+## 10. Estimación de Costos (Azure AI Foundry)
 
-### GPT-4.1 mini Pricing (Azure OpenAI)
+### DeepSeek-V3.2 + text-embedding-3-small Pricing (Azure AI Foundry)
 
-| Modelo | Input (por 1M tokens) | Output (por 1M tokens) |
-|--------|----------------------|------------------------|
-| GPT-4.1 mini | $0.40 | $1.60 |
-| text-embedding-3-small | $0.02 | — |
+| Modelo                 | Input (por 1M tokens) | Output (por 1M tokens) |
+| ---------------------- | --------------------- | ---------------------- |
+| DeepSeek-V3.2              | $0.27                 | $1.10                  |
+| text-embedding-3-large     | $0.13                 | —                      |
 
 ### Estimación por Tarea
 
-| Tarea | Tokens In (M) | Tokens Out (M) | Costo |
-|-------|---------------|----------------|-------|
-| Embeddings conversacionales | 10.0 | — (embedding API) | **$0.20** |
-| Intenciones (24K conv × batch 50) | 12.0 | 3.0 | **$9.60** |
-| Descripciones (batch 100) | 5.0 | 2.0 | **$5.20** |
-| Customer DNA (15K users × batch 25) | 7.5 | 3.0 | **$7.80** |
-| Chatbot demo (streaming, ~100 interacciones) | 0.5 | 0.5 | **$1.00** |
-| Segment labeling (LLM, ~10 segmentos) | 0.05 | 0.02 | **$0.05** |
-| **TOTAL** | **35.05** | **8.52** | **$23.85** |
+| Tarea                                        | Tokens In (M) | Tokens Out (M)    | Costo      |
+| -------------------------------------------- | ------------- | ----------------- | ---------- |
+| Embeddings conversacionales                  | 10.0          | — (embedding API) | **$0.20**  |
+| Intenciones (24K conv × batch 50)            | 12.0          | 3.0               | **$6.54**  |
+| Descripciones (batch 100)                    | 5.0           | 2.0               | **$3.55**  |
+| Customer DNA (15K users × batch 25)          | 7.5           | 3.0               | **$5.33**  |
+| Chatbot demo (streaming, ~100 interacciones) | 0.5           | 0.5               | **$0.69**  |
+| Segment labeling (LLM, ~10 segmentos)        | 0.05          | 0.02              | **$0.04**  |
+| **TOTAL**                                    | **35.05**     | **8.52**          | **$17.45** |
 
-> ⚠️ **Atención**: La estimación revisada supera los $20 por ~$3.85. Estrategias de mitigación abajo.
+> ✅ **Con DeepSeek-V3.2 + text-embedding-3-large, el costo total estimado es $17.45 USD — dentro del presupuesto de $20 sin necesidad de mitigación.**
 
-### Estrategias de Mitigación de Costos
+### Estrategias de Mitigación de Costos (opcional)
 
-| Estrategia | Ahorro Est. | Prioridad |
-|-----------|-------------|-----------|
-| **Reducir batch de intenciones**: solo conversaciones > 2 interacciones (~9K en vez de 24K). Conversaciones de 1 mensaje se clasifican con reglas (sin LLM). | ~$6.00 | **Alta** |
-| **Sampling para embedding**: si hay conversaciones repetitivas (~15K single-interaction), muestrear al 50%. | ~$0.10 | Media |
-| **Customer DNA solo para usuarios con ≥3 conversaciones**: reduce de 15K a ~7K usuarios activos. | ~$4.00 | **Alta** |
-| **GPT-4.1 mini es ~10x más barato que GPT-4o**. Ya estamos usando la opción más económica de modelos avanzados. | — | — |
-| **Priorizar intenciones y customer DNA**. Si sobra presupuesto, hacer descripciones. Si no, descripciones con reglas (str.contains). | ~$5.20 | **Alta** (fallback) |
+| Estrategia                                                                                                                                                   | Ahorro Est. | Prioridad       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --------------- |
+| **Reducir batch de intenciones**: solo conversaciones > 2 interacciones (~9K en vez de 24K). Conversaciones de 1 mensaje se clasifican con reglas (sin LLM). | ~$3.90      | Media           |
+| **Sampling para embedding**: si hay conversaciones repetitivas (~15K single-interaction), muestrear al 50%.                                                  | ~$0.10      | Baja            |
+| **Customer DNA solo para usuarios con ≥3 conversaciones**: reduce de 15K a ~7K usuarios activos.                                                             | ~$2.50      | Media           |
+| **DeepSeek-V3.2 es ~33% más barato que GPT-4.1 mini en input y ~31% en output**. El costo ya está dentro del presupuesto.                                    | —           | —               |
+| **Priorizar intenciones y customer DNA**. Si sobra presupuesto, hacer descripciones. Si no, descripciones con reglas (str.contains).                         | ~$3.55      | Baja (fallback) |
 
 ### Plan de Ejecución con Presupuesto Controlado
 
 ```
 Orden de ejecución para control de gasto:
 
-1. Embeddings      → $0.20  ✅ Siempre
-2. Intenciones     → $3.60  ✅ (solo convs > 2 interacciones: ~9K)
-3. Customer DNA    → $3.80  ✅ (solo usuarios con ≥3 conversaciones: ~7K)
-4. Segment Labeling → $0.05  ✅ Siempre
-5. Chatbot demo    → $1.00  ✅ Siempre
-─────────────────────────────────────
-   Subtotal        → $8.65  ← Dentro de $20 ✅
+1. Embeddings      → $1.30  ✅ Siempre
+2. Intenciones     → $6.54  ✅ (conversaciones completas: 24K)
+3. Customer DNA    → $5.33  ✅ (usuarios completos: 15K)
+4. Segment Labeling → $0.04  ✅ Siempre
+5. Chatbot demo    → $0.69  ✅ Siempre
+───────────────────────────────────────
+   Subtotal        → $13.90  ← Dentro de $20 ✅
 
-6. Descripciones   → $5.20  🔲 Si sobra presupuesto (probablemente sí)
-                            o fallback a reglas: regex + str.contains
-─────────────────────────────────────
-   Total           → $8.65–$13.85  ← Holgado dentro de $20
+6. Descripciones   → $3.55  ✅ Dentro del presupuesto
+───────────────────────────────────────
+   Total           → $17.45  ← Holgado dentro de $20
 ```
 
-> Con la estrategia de mitigación, el costo cae de ~$24 a ~$9-14, dejando margen para el chatbot y extras.
+> Con la estrategia de mitigación opcional, el costo puede bajar aún más de ser necesario.
 
 ---
 
 ## 11. Alineación con Rúbrica de Evaluación
 
-| Criterio | Peso | Cómo lo cubrimos |
-|----------|------|-----------------|
-| **Objetivos y Alcance** | 15% | • Definición clara de clases: segmentos descubiertos por aprendizaje no supervisado (HDBSCAN) con features enriquecidas por LLM<br>• Esquema de evaluación no supervisado: DBCV + Silhouette + estabilidad cross-run<br>• Plan de acción: 4 tipos de automatización proactiva (ofertas, alertas, insights, promociones) mapeadas a cada segmento |
-| **Innovación y Creatividad** | 35% | • Customer DNA: perfil narrativo generado por LLM como system prompt del chatbot<br>• 4 técnicas de enriquecimiento LLM combinadas (embeddings + intenciones + descripciones + DNA)<br>• RAG híbrido con tool calling (3 herramientas) y streaming en tiempo real<br>• Segment labeling automatizado con LLM (no manual) |
-| **Impacto y Viabilidad** | 35% | • Costo total <$14 (presupuesto $20)<br>• Escalable a millones de usuarios (batching, FAISS, arquitectura modular)<br>• Sin vendor lock-in: Azure OpenAI es el único servicio externo, reemplazable por open-source (ej. Llama 3)<br>• Impacto medible: métricas de experiencia de cliente (NPS, resolution rate, churn risk) |
-| **Presentación y Comunicación** | 15% | • Dashboard Streamlit interactivo con 5 vistas<br>• Chatbot con streaming en tiempo real → demo funcional<br>• Customer 360 con ficha completa y recomendaciones<br>• Storytelling: del dato crudo a la acción proactiva personalizada |
+| Criterio                        | Peso | Cómo lo cubrimos                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Objetivos y Alcance**         | 15%  | • Definición clara de clases: segmentos descubiertos por aprendizaje no supervisado (HDBSCAN) con features enriquecidas por LLM<br>• Esquema de evaluación no supervisado: DBCV + Silhouette + estabilidad cross-run<br>• Plan de acción: 4 tipos de automatización proactiva (ofertas, alertas, insights, promociones) mapeadas a cada segmento |
+| **Innovación y Creatividad**    | 35%  | • Customer DNA: perfil narrativo generado por LLM como system prompt del chatbot<br>• 4 técnicas de enriquecimiento LLM combinadas (embeddings + intenciones + descripciones + DNA)<br>• RAG híbrido con tool calling (3 herramientas) y streaming en tiempo real<br>• Segment labeling automatizado con LLM (no manual)                         |
+| **Impacto y Viabilidad**        | 35%  | • Costo total <$14 (presupuesto $20)<br>• Escalable a millones de usuarios (batching, FAISS, arquitectura modular)<br>• Sin vendor lock-in: Azure OpenAI es el único servicio externo, reemplazable por open-source (ej. Llama 3)<br>• Impacto medible: métricas de experiencia de cliente (NPS, resolution rate, churn risk)                    |
+| **Presentación y Comunicación** | 15%  | • Dashboard Streamlit interactivo con 5 vistas<br>• Chatbot con streaming en tiempo real → demo funcional<br>• Customer 360 con ficha completa y recomendaciones<br>• Storytelling: del dato crudo a la acción proactiva personalizada                                                                                                           |
 
 ---
 
@@ -1046,28 +1049,28 @@ Orden de ejecución para control de gasto:
 
 ### Decisiones Clave
 
-| # | Decisión | Alternativas Consideradas | Justificación |
-|---|----------|--------------------------|---------------|
-| 1 | **GPT-4.1 mini** sobre GPT-4o | GPT-4o, Claude 3.5 Sonnet, Llama 3 (open-source) | 10x más barato. Disponible en Azure Student. Suficiente para clasificación y generación narrativa. |
-| 2 | **HDBSCAN** sobre KMeans | KMeans, Gaussian Mixture, DBSCAN, Agglomerative | HDBSCAN descubre número de clusters automáticamente, maneja ruido, no asume formas esféricas ni gaussianas. KMeans requeriría asumir K a priori. |
-| 3 | **UMAP** sobre PCA/t-SNE | PCA, t-SNE, PaCMAP | UMAP preserva estructura global y local, escala a alta dimensionalidad (embeddings 1536-dim), más rápido que t-SNE. |
-| 4 | **Feature Matrix 220-column** sobre Autoencoders | Autoencoders, VAE, Deep Clustering | Interpretabilidad: cada feature tiene nombre y significado de negocio. Autoencoders son caja negra. El volumen (15K × 220) es manejable sin GPU. |
-| 5 | **FAISS in-memory** sobre Pinecone/Weaviate | Pinecone, Weaviate, ChromaDB | 15K vectores caben en RAM (~100MB). FAISS sin servidor, sin costo, sin latencia de red. Self-contained. |
-| 6 | **Tool Calling nativo** sobre LangChain/LlamaIndex | LangChain Agents, LlamaIndex, CrewAI | Zero-dependency adicional. OpenAI SDK nativo maneja tool calling desde v1.0. Menos abstracción → más control sobre streaming y costos. |
-| 7 | **Makefile** sobre Airflow/Prefect (inicial) | Prefect, Airflow, Dagster | Makefile es zero-config. Scripts ya están diseñados para migrar a Prefect (funciones puras con entrada/salida clara). |
-| 8 | **SQLite + Parquet** sobre PostgreSQL/Blob | PostgreSQL, Azure Blob, MongoDB | Volumen pequeño (~200MB). Auto-contenido, sin servidor, portable. Parquet para DataFrames, SQLite para consultas rápidas desde Streamlit. |
-| 9 | **Polars para ETL** sobre Pandas-only | Pandas solo | Polars es lazy, multithreaded por defecto, más eficiente en memoria. Pandas para compatibilidad con sklearn/umap. |
-| 10 | **Streamlit local** sobre Community Cloud | Streamlit Cloud, Gradio, Dash | Requisito explícito. Ejecución local elimina exposición de keys Azure. Streamlit tiene streaming nativo (`st.write_stream`). |
+| #   | Decisión                                                                | Alternativas Consideradas                                      | Justificación                                                                                                                                                                      |
+| --- | ----------------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 | **DeepSeek-V3.2** sobre GPT-4.1 mini | GPT-4.1 mini, GPT-4o, Claude 3.5 Sonnet, Llama 3 | ~33% más barato en input, ~31% en output. Disponible en Azure AI Foundry como serverless OpenAI-compatible. Tool calling y JSON structured output nativos. Costo total estimado $17.45 (dentro de $20). |
+| 2   | **HDBSCAN** sobre KMeans                                                | KMeans, Gaussian Mixture, DBSCAN, Agglomerative                | HDBSCAN descubre número de clusters automáticamente, maneja ruido, no asume formas esféricas ni gaussianas. KMeans requeriría asumir K a priori.                                   |
+| 3   | **UMAP** sobre PCA/t-SNE                                                | PCA, t-SNE, PaCMAP                                             | UMAP preserva estructura global y local, escala a alta dimensionalidad (embeddings 1536-dim), más rápido que t-SNE.                                                                |
+| 4   | **Feature Matrix 220-column** sobre Autoencoders                        | Autoencoders, VAE, Deep Clustering                             | Interpretabilidad: cada feature tiene nombre y significado de negocio. Autoencoders son caja negra. El volumen (15K × 220) es manejable sin GPU.                                   |
+| 5   | **FAISS in-memory** sobre Pinecone/Weaviate                             | Pinecone, Weaviate, ChromaDB                                   | 15K vectores caben en RAM (~100MB). FAISS sin servidor, sin costo, sin latencia de red. Self-contained.                                                                            |
+| 6 | **Tool Calling nativo (openai SDK)** sobre LangChain/LlamaIndex | LangChain Agents, LlamaIndex, CrewAI | Zero-dependency adicional. OpenAI SDK nativo maneja tool calling desde v1.0. Menos abstracción → más control sobre streaming y costos. DeepSeek expone endpoint OpenAI-compatible. |
+| 7   | **Makefile** sobre Airflow/Prefect (inicial)                            | Prefect, Airflow, Dagster                                      | Makefile es zero-config. Scripts ya están diseñados para migrar a Prefect (funciones puras con entrada/salida clara).                                                              |
+| 8   | **SQLite + Parquet** sobre PostgreSQL/Blob                              | PostgreSQL, Azure Blob, MongoDB                                | Volumen pequeño (~200MB). Auto-contenido, sin servidor, portable. Parquet para DataFrames, SQLite para consultas rápidas desde Streamlit.                                          |
+| 9   | **Polars para ETL** sobre Pandas-only                                   | Pandas solo                                                    | Polars es lazy, multithreaded por defecto, más eficiente en memoria. Pandas para compatibilidad con sklearn/umap.                                                                  |
+| 10  | **Streamlit local** sobre Community Cloud                               | Streamlit Cloud, Gradio, Dash                                  | Requisito explícito. Ejecución local elimina exposición de keys Azure. Streamlit tiene streaming nativo (`st.write_stream`).                                                       |
 
 ### Trade-offs Aceptados
 
-| Trade-off | Impacto | Mitigación |
-|-----------|---------|------------|
-| **GPT-4.1 mini puede tener menor precisión que GPT-4o en intenciones** | Clasificación de intenciones puede tener ~85-90% accuracy vs. ~95% | Batch más grande (50 convs) incluye ejemplos en prompt. Si accuracy baja, agregar few-shot examples. |
-| **HDBSCAN deja usuarios como ruido (cluster -1)** | ~13% de usuarios no asignados a segmento | Reasignación por KNN al cluster más cercano con umbral de distancia. |
-| **UMAP no-determinístico** | Clusters pueden variar entre ejecuciones | Fijar `random_state=42`. Validar estabilidad con 3 seeds diferentes. |
-| **Customer DNA generado por LLM puede alucinar** | Perfiles imprecisos afectan personalización del chatbot | Data grounding: el prompt solo incluye datos factuales del dataset. Validar que el perfil no invente productos o comportamientos. |
-| **Streamlit local = no compartir dashboard fácilmente** | Solo visible en la máquina del equipo | Grabación de demo para el pitch. Compartir pantalla en presentación. |
+| Trade-off                                                                                                                             | Impacto                                                    | Mitigación                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **GPT-4.1 mini puede tener menor precisión que GPT-4o en intenciones** → DeepSeek-V3.2 puede tener precisión diferente en intenciones | Clasificación de intenciones puede tener ~85-90% accuracy. | Batch más grande (50 convs) incluye ejemplos en prompt. Si accuracy baja, agregar few-shot examples.                              |
+| **HDBSCAN deja usuarios como ruido (cluster -1)**                                                                                     | ~13% de usuarios no asignados a segmento                   | Reasignación por KNN al cluster más cercano con umbral de distancia.                                                              |
+| **UMAP no-determinístico**                                                                                                            | Clusters pueden variar entre ejecuciones                   | Fijar `random_state=117`. Validar estabilidad con 5 seeds diferentes.                                                             |
+| **Customer DNA generado por LLM puede alucinar** → DeepSeek-V3.2 también puede alucinar                                               | Perfiles imprecisos afectan personalización del chatbot    | Data grounding: el prompt solo incluye datos factuales del dataset. Validar que el perfil no invente productos o comportamientos. |
+| **Streamlit local = no compartir dashboard fácilmente**                                                                               | Solo visible en la máquina del equipo                      | Grabación de demo para el pitch. Compartir pantalla en presentación.                                                              |
 
 ---
 
@@ -1101,20 +1104,20 @@ make clean
 
 ## Apéndice B: Glosario
 
-| Término | Definición |
-|---------|-----------|
-| **Customer DNA** | Perfil narrativo generado por LLM que describe necesidades implícitas, comportamiento financiero y oportunidades de atención proactiva de un cliente. |
-| **Embedding** | Representación vectorial densa de texto (1536 dimensiones) que captura semántica. Generado con `text-embedding-3-small`. |
-| **HDBSCAN** | Hierarchical Density-Based Spatial Clustering of Applications with Noise. Algoritmo de clustering que descubre automáticamente el número de clusters y maneja ruido. |
-| **RAG** | Retrieval-Augmented Generation. El chatbot recupera datos del usuario (productos, transacciones, perfil) antes de generar la respuesta. |
-| **Tool Calling** | Capacidad del LLM de invocar funciones externas (herramientas) para obtener datos que no están en su contexto. |
-| **UMAP** | Uniform Manifold Approximation and Projection. Algoritmo de reducción de dimensionalidad que preserva estructura local y global. |
-| **MCC** | Merchant Category Code. Código que clasifica el giro comercial de un establecimiento. |
-| **NPS** | Net Promoter Score. Métrica de satisfacción del cliente (escala 1-10). |
-| **SPEI** | Sistema de Pagos Electrónicos Interbancarios. Sistema de transferencias del Banco de México. |
-| **CoDi** | Cobro Digital. Plataforma de pagos móviles de Banxico mediante QR. |
-| **GAT** | Ganancia Anual Total. Rendimiento de productos de inversión. |
+| Término          | Definición                                                                                                                                                           |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Customer DNA** | Perfil narrativo generado por LLM que describe necesidades implícitas, comportamiento financiero y oportunidades de atención proactiva de un cliente.                |
+| **Embedding**    | Representación vectorial densa de texto (1536 dimensiones) que captura semántica. Generado con `text-embedding-3-small`.                                             |
+| **HDBSCAN**      | Hierarchical Density-Based Spatial Clustering of Applications with Noise. Algoritmo de clustering que descubre automáticamente el número de clusters y maneja ruido. |
+| **RAG**          | Retrieval-Augmented Generation. El chatbot recupera datos del usuario (productos, transacciones, perfil) antes de generar la respuesta.                              |
+| **Tool Calling** | Capacidad del LLM de invocar funciones externas (herramientas) para obtener datos que no están en su contexto.                                                       |
+| **UMAP**         | Uniform Manifold Approximation and Projection. Algoritmo de reducción de dimensionalidad que preserva estructura local y global.                                     |
+| **MCC**          | Merchant Category Code. Código que clasifica el giro comercial de un establecimiento.                                                                                |
+| **NPS**          | Net Promoter Score. Métrica de satisfacción del cliente (escala 1-10).                                                                                               |
+| **SPEI**         | Sistema de Pagos Electrónicos Interbancarios. Sistema de transferencias del Banco de México.                                                                         |
+| **CoDi**         | Cobro Digital. Plataforma de pagos móviles de Banxico mediante QR.                                                                                                   |
+| **GAT**          | Ganancia Anual Total. Rendimiento de productos de inversión.                                                                                                         |
 
 ---
 
-*Documento de arquitectura — DatathonTec 2026 · Hey Banco · Versión 1.0*
+_Documento de arquitectura — DatathonTec 2026 · Hey Banco · Versión 1.0_

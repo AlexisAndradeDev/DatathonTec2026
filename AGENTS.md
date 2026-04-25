@@ -4,7 +4,7 @@
 
 Motor de Inteligencia & Atención Personalizada: pipeline de IA para integrar logs conversacionales + registros transaccionales, segmentación no supervisada, y chatbot RAG con streaming.
 
-**Current phase**: planning — no code yet. All specs live in docs.
+**Current phase**: implementation — skeleton created, enrichment + chatbot pending.
 
 ## Key References
 
@@ -16,18 +16,18 @@ Motor de Inteligencia & Atención Personalizada: pipeline de IA para integrar lo
 
 ## Hard Constraints
 
-- **$20 USD max budget** for Azure OpenAI API calls.
-- **Azure for Students** — only service available is Azure OpenAI.
-- **GPT-4.1 mini** is the chosen model (cheapest viable).
+- **$20 USD max budget** for Azure AI Foundry API calls.
+- **Azure for Students** — services: Azure AI Foundry (DeepSeek-V3.2 serverless) + Azure OpenAI (text-embedding-3-large).
+- **DeepSeek-V3.2** is the chosen chat model. **text-embedding-3-large** for embeddings (3072 dimensions).
 - **Streamlit runs local** — never deploy to Community Cloud, keys never leave the machine.
-- **Secrets in `.env`** — `AZURE_OPENAI_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_EMBEDDING_DEPLOYMENT`.
+- **Secrets in `.env`** — `AZURE_CHAT_API_KEY`, `AZURE_CHAT_BASE_URL`, `AZURE_CHAT_MODEL`, `AZURE_EMBEDDING_API_KEY`, `AZURE_EMBEDDING_ENDPOINT`, `AZURE_EMBEDDING_MODEL`.
 - **Data is 100% synthetic** — academic sandbox, no regulatory restrictions (CNBV, LFPDPPP).
 
 ## Architecture decisions (from Arquitectura.md §12)
 
 | Decision      | Chosen                                   | Rejected               |
 | ------------- | ---------------------------------------- | ---------------------- |
-| LLM model     | GPT-4.1 mini                             | GPT-4o, Claude         |
+| LLM model     | DeepSeek-V3.2                            | GPT-4o, Claude, GPT-4.1 mini |
 | Clustering    | HDBSCAN                                  | KMeans, GMM            |
 | Dim reduction | UMAP                                     | PCA, t-SNE             |
 | Vector store  | FAISS in-memory                          | Pinecone, Weaviate     |
@@ -52,10 +52,10 @@ notebooks/         — exploration
 
 ## 4 enrichment techniques (sequential, budget-controlled)
 
-1. Embeddings () — `text-embedding-3-small`, mean-pool per user (~$0.20)
+1. Embeddings () — `text-embedding-3-large` (3072 dims), mean-pool per user (~$1.30)
 2. Intent extraction — classify conversations with structured JSON output (~$3.60)
-3. Description normalization — extract structured info from free-text transaction descriptions (~$5.20)
-4. Customer DNA — narrative profile per customer, used as chatbot system prompt (~$3.80)
+3. Description normalization — extract structured info from free-text transaction descriptions (~$3.55)
+4. Customer DNA — narrative profile per customer, used as chatbot system prompt (~$5.33)
 
 Budget control: prioritize 1→2→4. Run 3 only if budget remains (or fallback to regex rules).
 

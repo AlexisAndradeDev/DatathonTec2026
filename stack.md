@@ -20,8 +20,8 @@
 | UMAP-learn | ≥0.5 | Reducción de dimensionalidad preservando estructura local/global |
 | HDBSCAN | ≥0.8 | Clustering no supervisado basado en densidad |
 | SHAP | ≥0.42 | Interpretabilidad de features discriminantes por segmento |
-| openai | ≥1.0 | SDK de Azure OpenAI (chat, embeddings, streaming, tool calling) |
-| tiktoken | ≥0.5 | Estimación de tokens para control de costos |
+| openai | ≥1.0 | SDK para chat (DeepSeek-V3.2, OpenAI-compatible) y embeddings (Azure OpenAI) |
+| azure-core | — | AzureKeyCredential para autenticación de embeddings |
 | FAISS-cpu | ≥1.7 | Vector store in-memory para búsqueda semántica RAG |
 | pyarrow | ≥14.0 | Lectura/escritura de Parquet comprimido |
 | joblib | ≥1.3 | Serialización eficiente de modelos entrenados |
@@ -38,8 +38,10 @@
 
 | Nombre | Versión | Uso |
 |--------|---------|-----|
-| Azure OpenAI | — | Servicio cloud para GPT-4.1 mini y text-embedding-3-small |
-| text-embedding-3-small | — | Modelo de embeddings semánticos (1536 dimensiones) |
+| Azure AI Foundry | — | DeepSeek-V3.2 serverless (OpenAI-compatible endpoint) |
+| Azure OpenAI | — | text-embedding-3-large (3072 dimensiones) |
+| DeepSeek-V3.2 | — | Modelo de chat principal via serverless endpoint |
+| text-embedding-3-large | — | Modelo de embeddings semánticos (3072 dimensiones) |
 | Azure Blob Storage | — | Backup opcional de datasets (5GB LRS hot gratis) |
 | Makefile | — | Orquestación secuencial del pipeline (6 targets) |
 | Prefect | ≥2.0 | Framework de orquestación preparado para migración futura |
