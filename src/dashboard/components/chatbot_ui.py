@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, os.getcwd())
 
@@ -95,6 +96,10 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
         st.session_state.havi_messages = [
             {"role": "system", "content": dna_prefix + (
                 "Eres Havi, el asistente virtual inteligente de Hey Banco. "
+                f"Estas hablando con el cliente {user_id}. "
+                "Cuando uses las herramientas get_account_summary, "
+                "get_recent_transactions o get_recommendation, "
+                f"siempre pasa user_id='{user_id}' como parametro. "
                 "Tu personalidad es empatica, proactiva y experta en finanzas "
                 "personales. Siempre personaliza tus respuestas con el contexto "
                 "del cliente. Se proactivo: sugiere acciones relevantes. "
@@ -192,16 +197,21 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
                 if chunk["type"] == "text":
                     if showing_typing:
                         showing_typing = False
-                    text_buffer += chunk["content"]
-                    placeholder.markdown(
-                        f'<div style="background:{HEY_WHITE};'
-                        f'border:1.5px solid {HEY_TEAL};'
-                        f'padding:0.6rem 1rem;border-radius:14px;'
-                        f'display:inline-block;max-width:80%;'
-                        f'color:{HEY_BLACK};">'
-                        f'{text_buffer}</div>',
-                        unsafe_allow_html=True,
-                    )
+                    words = chunk["content"].split(" ")
+                    for i, word in enumerate(words):
+                        if i > 0:
+                            text_buffer += " "
+                        text_buffer += word
+                        placeholder.markdown(
+                            f'<div style="background:{HEY_WHITE};'
+                            f'border:1.5px solid {HEY_TEAL};'
+                            f'padding:0.6rem 1rem;border-radius:14px;'
+                            f'display:inline-block;max-width:80%;'
+                            f'color:{HEY_BLACK};">'
+                            f'{text_buffer}</div>',
+                            unsafe_allow_html=True,
+                        )
+                        time.sleep(0.03)
                 elif chunk["type"] == "tool_call":
                     showing_typing = False
                     tool_calls_shown.append(chunk)

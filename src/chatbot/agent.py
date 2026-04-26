@@ -72,14 +72,11 @@ def chat_with_tools(
                 "content": result,
             })
 
-        response2 = chat_completion(
+        for chunk_text in chat_completion_stream(
             messages=messages,
             temperature=0.5,
-            max_tokens=1024,
-        )
-        content2 = response2.get("content", "")
-        if content2:
-            yield {"type": "text", "content": content2}
+        ):
+            yield {"type": "text", "content": chunk_text}
 
     elif content:
         yield {"type": "text", "content": content}
