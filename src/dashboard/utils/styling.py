@@ -443,11 +443,11 @@ def apply_hey_theme() -> None:
             font-weight: 700;
             flex-shrink: 0;
         }}
-        .product-icon.credito {{ background: {hex_to_rgba(HEY_CORAL, 0.13)}; color: {HEY_CORAL}; }}
-        .product-icon.debito {{ background: {hex_to_rgba(HEY_TEAL, 0.13)}; color: {HEY_TEAL}; }}
-        .product-icon.inversion {{ background: {hex_to_rgba(HEY_PRIMARY, 0.27)}; color: {HEY_BLACK}; }}
-        .product-icon.nomina {{ background: {hex_to_rgba(HEY_LIME, 0.27)}; color: {HEY_BLACK}; }}
-        .product-icon.default {{ background: {HEY_GRAY_BG}; color: {HEY_GRAY_TEXT}; }}
+        .product-icon.credito, .product-icon.debito, .product-icon.inversion,
+        .product-icon.nomina, .product-icon.default, .product-icon.seguro {{
+            background: #E8E8E8;
+            color: #333333;
+        }}
 
         /* ── Divider ───────────────────────────────────── */
         .hey-divider {{

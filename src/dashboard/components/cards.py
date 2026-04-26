@@ -172,13 +172,19 @@ def product_card(tipo: str, saldo: float = 0, limite: float = 0,
                  tasa: float = 0) -> None:
     """Tarjeta visual para un producto financiero."""
     tipo_lower = tipo.lower().replace(" ", "_")
-    icon_map = {
-        "tarjeta_de_credito": ("C", "credito"),
-        "tarjeta_de_debito": ("D", "debito"),
-        "cuenta_de_inversion": ("I", "inversion"),
-        "cuenta_de_nomina": ("N", "nomina"),
-    }
-    letter, cls = icon_map.get(tipo_lower, ("?", "default"))
+
+    if "credito" in tipo_lower:
+        letter, cls = "C", "credito"
+    elif "debito" in tipo_lower:
+        letter, cls = "D", "debito"
+    elif "inversion" in tipo_lower:
+        letter, cls = "I", "inversion"
+    elif "nomina" in tipo_lower:
+        letter, cls = "N", "nomina"
+    elif "seguro" in tipo_lower:
+        letter, cls = "S", "seguro"
+    else:
+        letter, cls = "●", "default"
 
     saldo_fmt = f"${saldo:,.0f}" if saldo else "--"
     limite_fmt = f"${limite:,.0f}" if limite else "--"
