@@ -1,15 +1,17 @@
-.PHONY: validate enrich features cluster dashboard all clean
+.PHONY: validate ingest enrich features cluster dashboard all clean
 
 VENV := .venv/bin
 
 validate:
 	$(VENV)/python src/data/validate.py
 
+ingest:
+	$(VENV)/python src/data/ingest.py
+
 enrich:
-	$(VENV)/python src/enrichment/embeddings.py
-	$(VENV)/python src/enrichment/intents.py
-	$(VENV)/python src/enrichment/descriptions.py
-	$(VENV)/python src/enrichment/customer_dna.py
+	$(VENV)/python -m src.enrichment.embeddings
+	$(VENV)/python -m src.enrichment.intents
+	$(VENV)/python -m src.enrichment.customer_dna
 
 features:
 	$(VENV)/python src/features/build_matrix.py
