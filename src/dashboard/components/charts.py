@@ -113,18 +113,34 @@ def sankey_categories(tx_df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def radar_chart(user_vals: dict, segment_vals: dict, categories: list[str]) -> go.Figure:
-    labels_map = {
-        "es_hey_pro": "Hey Pro",
-        "tiene_seguro": "Seguro",
-        "pct_internacional": "Intl",
-        "pct_no_procesada": "No Proc.",
-        "pct_voz": "Voz",
-        "ingreso_mensual_mxn": "Ingreso",
-        "score_buro_interno": "Score Buro",
-        "satisfaccion_1_10": "Satisfac.",
+def _label_feature(feat: str) -> str:
+    known = {
+        "es_hey_pro": "Hey Pro", "tiene_seguro": "Seguro",
+        "nomina_domiciliada": "Nomina", "recibe_remesas": "Remesas",
+        "patron_uso_atipico": "Atipico", "usa_hey_shop": "Hey Shop",
+        "satisfaccion_1_10": "Satisfac.", "score_buro_interno": "Score",
+        "ingreso_mensual_mxn": "Ingreso", "edad": "Edad",
+        "antiguedad_dias": "Antiguedad", "num_productos_activos": "N Prod.",
+        "frecuencia_total": "Frec. TX", "monto_promedio": "$ Promedio",
+        "monto_total": "$ Total", "dias_desde_ultimo_login": "Ult. Login",
     }
-    display_labels = [labels_map.get(c, c) for c in categories]
+    if feat in known:
+        return known[feat]
+    if feat.startswith("pct_"):
+        return "% " + feat[4:].replace("_", " ").title()
+    if feat.startswith("prod_"):
+        return feat[5:].replace("_", " ").title()
+    if feat.startswith("cat_"):
+        return feat[4:].replace("_", " ").title()
+    if feat.startswith("intent_"):
+        return feat[7:].replace("_", " ").title()
+    if feat.startswith("monto_"):
+        return "$ " + feat[6:].replace("_", " ").title()
+    return feat.replace("_", " ").title()
+
+
+def radar_chart(user_vals: dict, segment_vals: dict, categories: list[str]) -> go.Figure:
+    display_labels = [_label_feature(c) for c in categories]
 
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(

@@ -130,11 +130,19 @@ def run_customer_360() -> None:
         with col_r:
             matrix = load_feature_matrix()
             seg_users = load_segments().filter(
-                pl.col("cluster") == profile["cluster_id"]
+                (pl.col("cluster") == profile["cluster_id"]) &
+                (pl.col("user_id") != selected)
             )["user_id"].to_list()
 
-            categories = ["es_hey_pro", "tiene_seguro", "pct_internacional",
-                          "pct_no_procesada", "pct_voz"]
+            top_feats = profile.get("top_features", [])
+            categories = []
+            for f in top_feats:
+                if len(categories) >= 5:
+                    break
+                col = f["feature"]
+                if col in matrix.columns and col not in ("user_id", "cluster", "umap_x", "umap_y"):
+                    categories.append(col)
+
             user_vals = {}
             seg_vals = {}
             for c in categories:
@@ -146,15 +154,10 @@ def run_customer_360() -> None:
                         matrix.filter(pl.col("user_id").is_in(seg_users))[c].mean() or 0
                     )
 
-            max_v = max(
-                max(user_vals.values(), default=0.01),
-                max(seg_vals.values(), default=0.01),
-                0.01,
-            )
             for c in categories:
-                if max_v > 0:
-                    user_vals[c] = user_vals.get(c, 0) / max_v
-                    seg_vals[c] = seg_vals.get(c, 0) / max_v
+                max_c = max(user_vals.get(c, 0), seg_vals.get(c, 0), 0.01)
+                user_vals[c] = user_vals.get(c, 0) / max_c
+                seg_vals[c] = seg_vals.get(c, 0) / max_c
 
             radar = radar_chart(user_vals, seg_vals, categories)
             st.plotly_chart(radar, use_container_width=True)
