@@ -213,7 +213,7 @@ def _build_dna(
 def run_customer_dna(
     data_dir: str = "data/processed/",
     output_path: str = "data/processed/customer_dna.parquet",
-    min_convs: int = 2,
+    min_convs: int = 1,
 ) -> None:
     """Genera perfil narrativo por usuario via template Python.
 
