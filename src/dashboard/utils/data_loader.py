@@ -2,6 +2,7 @@
 
 import json
 import os
+from datetime import datetime
 
 import polars as pl
 import streamlit as st
@@ -96,3 +97,48 @@ def get_dna_for_user(user_id: str) -> str | None:
     if row.shape[0] == 0:
         return None
     return row["dna_text"][0]
+
+
+def get_data_timestamp() -> str:
+    """Fecha de la ultima actualizacion de datos procesados."""
+    files = [
+        os.path.join(DATA_DIR, "clientes_clean.parquet"),
+        os.path.join(DATA_DIR, "user_segments.parquet"),
+        os.path.join(DATA_DIR, "feature_matrix.parquet"),
+        os.path.join(DATA_DIR, "customer_dna.parquet"),
+        os.path.join(DATA_DIR, "segment_profiles.json"),
+    ]
+    mtimes = [os.path.getmtime(f) for f in files if os.path.exists(f)]
+    if not mtimes:
+        return "N/A"
+    latest = max(mtimes)
+    return datetime.fromtimestamp(latest).strftime("%d/%m/%Y %H:%M")
+
+
+def filter_by_segments(df: pl.DataFrame, segment_ids: list[int],
+                       segments_df: pl.DataFrame | None = None) -> pl.DataFrame:
+    """Filtra un DataFrame por los user_id pertenecientes a los segmentos indicados."""
+    if not segment_ids:
+        return df
+    if segments_df is None:
+        segments_df = load_segments()
+    seg_users = segments_df.filter(
+        pl.col("cluster").is_in(segment_ids)
+    )["user_id"].to_list()
+    if "user_id" in df.columns:
+        return df.filter(pl.col("user_id").is_in(seg_users))
+    return df
+
+
+def filter_by_date_range(df: pl.DataFrame,
+                         date_col: str = "fecha_hora",
+                         start_date=None,
+                         end_date=None) -> pl.DataFrame:
+    """Filtra un DataFrame por rango de fechas."""
+    if date_col not in df.columns:
+        return df
+    if start_date is not None:
+        df = df.filter(pl.col(date_col) >= start_date)
+    if end_date is not None:
+        df = df.filter(pl.col(date_col) <= end_date)
+    return df
