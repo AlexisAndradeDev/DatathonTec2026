@@ -6,6 +6,7 @@ import time
 
 sys.path.insert(0, os.getcwd())
 
+import polars as pl
 import streamlit as st
 
 from src.chatbot.agent import chat_with_tools
@@ -18,6 +19,52 @@ from src.dashboard.utils.styling import (
 def _on_chip_click(prompt: str) -> None:
     """Callback para chips de accion rapida: guarda el prompt en session state."""
     st.session_state.chatbot_prompt_override = prompt
+
+
+def _make_initials(row: dict) -> str:
+    uid = row.get("user_id", "U")
+    parts = uid.split("-") if uid else []
+    letters = "ABCDEFGH"
+    if len(parts) >= 2 and parts[-1].isdigit():
+        n = int(parts[-1])
+        return f"{parts[0][0]}{letters[n % 8]}"
+    return uid[:2].upper()
+
+
+def _render_client_preview(user_id: str, user_row,
+                           segment_name: str | None,
+                           dna_text: str | None) -> None:
+    row = {c: user_row[c][0] for c in user_row.columns}
+    initials = _make_initials(row)
+    edad = row.get("edad", "?")
+    ingreso = row.get("ingreso_mensual_mxn", 0)
+    score = row.get("score_buro", "?")
+    sat = row.get("satisfaccion_1_10", "?")
+
+    dna_snippet = ""
+    if dna_text:
+        dna_snippet = dna_text[:120] + "..." if len(dna_text) > 120 else dna_text
+
+    st.markdown(
+        f"""
+        <div style="background:{HEY_WHITE};border-radius:12px;padding:1rem 1.25rem;
+        box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:0.75rem;
+        display:flex;align-items:flex-start;gap:0.75rem;">
+            <div class="avatar-circle">{initials}</div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:0.95rem;color:{HEY_BLACK};">
+                {user_id}</div>
+                <div style="margin-top:0.15rem;">
+                    {f'<span class="hey-tag cashback">{segment_name}</span>' if segment_name else ''}
+                </div>
+                <div style="font-size:0.75rem;color:{HEY_GRAY_TEXT};margin-top:0.3rem;">
+                {edad} anos · ${ingreso:,}/mes · Score {score} · Satisfaccion {sat}/10</div>
+                {f'<div style="font-size:0.75rem;color:{HEY_GRAY_TEXT};margin-top:0.15rem;line-height:1.4;">{dna_snippet}</div>' if dna_snippet else ''}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _get_suggested_prompts(segment_name: str | None) -> list[dict]:
@@ -40,16 +87,12 @@ def _get_suggested_prompts(segment_name: str | None) -> list[dict]:
 
 
 def render_chat_ui(user_id: str, dna_text: str | None = None,
-                   segment_name: str | None = None) -> None:
+                   segment_name: str | None = None,
+                   user_row: pl.DataFrame | None = None) -> None:
     """Renderiza la UI completa del chatbot con historial y tool calls."""
 
-    if dna_text or segment_name:
-        parts = []
-        if segment_name:
-            parts.append(f"Segmento: {segment_name}")
-        if dna_text:
-            parts.append("DNA: cargado")
-        st.info(" | ".join(parts))
+    if user_row is not None and user_row.shape[0] > 0:
+        _render_client_preview(user_id, user_row, segment_name, dna_text)
 
     # ── Suggested prompts ─────────────────────────────
     st.markdown('<div class="suggested-chips">', unsafe_allow_html=True)
@@ -92,7 +135,8 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
             )},
             {"role": "assistant", "content": (
                 "Hola! Soy Havi, tu asistente virtual de Hey Banco. "
-                "Estoy aqui para ayudarte con tus finanzas. "
+                + (f"Eres parte del segmento {segment_name}. " if segment_name else "")
+                + "Estoy aqui para ayudarte con tus finanzas. "
                 "En que puedo apoyarte hoy?"
             )},
         ]

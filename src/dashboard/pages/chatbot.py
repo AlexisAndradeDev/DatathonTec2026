@@ -5,10 +5,12 @@ import sys
 
 sys.path.insert(0, os.getcwd())
 
+import polars as pl
 import streamlit as st
 
 from src.dashboard.utils.data_loader import (
     get_user_ids, get_profile_for_user, get_dna_for_user,
+    load_clients,
 )
 from src.dashboard.components.chatbot_ui import render_chat_ui
 
@@ -48,7 +50,10 @@ def run_chatbot() -> None:
     profile = get_profile_for_user(selected)
     segment_name = profile["nombre"] if profile else None
 
-    render_chat_ui(selected, dna, segment_name)
+    clients = load_clients()
+    user_row = clients.filter(pl.col("user_id") == selected)
+
+    render_chat_ui(selected, dna, segment_name, user_row)
 
 
 run_chatbot()
