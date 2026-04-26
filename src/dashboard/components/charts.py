@@ -11,9 +11,16 @@ from src.dashboard.utils.styling import (
     hex_to_rgba,
 )
 
-HEY_COLORS = (
-    px.colors.qualitative.Plotly + px.colors.qualitative.Set1[:5]
-)
+HEY_COLORS = [
+    "#0066CC",  # Azul vibrante
+    "#FF6B35",  # Naranja vibrante
+    "#00B359",  # Verde vibrante
+    "#6B46C1",  # Púrpura vibrante
+    "#FF0099",  # Magenta vibrante
+    "#00CCCC",  # Cyan vibrante
+    "#FFD700",  # Oro vibrante
+    "#FF3333",  # Rojo vibrante
+]
 
 PLOT_LAYOUT = dict(
     paper_bgcolor=HEY_GRAY_BG,
@@ -71,7 +78,7 @@ def heatmap_hora_dia(tx_df: pd.DataFrame) -> go.Figure:
         z=pivot.values,
         x=list(range(24)),
         y=days_es,
-        colorscale=[[0, HEY_WHITE], [1, HEY_PRIMARY]],
+        colorscale=[[0, "#E3F2FD"], [1, "#0066CC"]],
         hoverongaps=False,
         colorbar=dict(title="Monto prom. (MXN)"),
     ))
@@ -98,9 +105,9 @@ def sankey_categories(tx_df: pd.DataFrame) -> go.Figure:
     fig = go.Figure(data=go.Sankey(
         node=dict(
             pad=15, thickness=15,
-            line=dict(color=HEY_BLACK, width=0.5),
+            line=dict(color="#0066CC", width=0.5),
             label=all_nodes,
-            color=HEY_TEAL,
+            color="#0066CC",
         ),
         link=dict(
             source=[node_map[r["categoria_mcc"]] for _, r in flows.iterrows()],
@@ -180,7 +187,7 @@ def sunburst_intents(intents_df: pd.DataFrame) -> go.Figure:
         values="count",
         color="count",
         color_continuous_scale=[
-            (0, HEY_GRAY_BG), (0.5, HEY_TEAL), (1, HEY_PRIMARY)
+            (0, "#E3F2FD"), (0.5, "#FF6B35"), (1, "#0066CC")
         ],
         title="Distribucion de Intenciones",
     )
