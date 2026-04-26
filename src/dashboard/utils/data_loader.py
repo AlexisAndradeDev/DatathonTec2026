@@ -99,6 +99,17 @@ def get_dna_for_user(user_id: str) -> str | None:
     return row["dna_text"][0]
 
 
+def get_action_for_user(user_id: str) -> str | None:
+    dna = load_customer_dna()
+    if "accion_proactiva" not in dna.columns:
+        return None
+    row = dna.filter(pl.col("user_id") == user_id)
+    if row.shape[0] == 0:
+        return None
+    val = row["accion_proactiva"][0]
+    return val if val else None
+
+
 def get_data_timestamp() -> str:
     """Fecha de la ultima actualizacion de datos procesados."""
     files = [

@@ -35,6 +35,10 @@ def _load_segments() -> pl.DataFrame:
     return pl.read_parquet(os.path.join(DATA_DIR, "user_segments.parquet"))
 
 
+def _load_dna() -> pl.DataFrame:
+    return pl.read_parquet(os.path.join(DATA_DIR, "customer_dna.parquet"))
+
+
 def _load_profiles() -> list[dict]:
     import json
     with open(os.path.join(DATA_DIR, "segment_profiles.json"), encoding="utf-8") as f:
@@ -144,35 +148,28 @@ def get_recent_transactions(user_id: str, n: int = 5) -> dict:
 
 
 def get_recommendation(user_id: str) -> dict:
-    """Retorna recomendación personalizada según segmento."""
-    segs = _load_segments()
-    profiles = _load_profiles()
+    """Retorna recomendacion personalizada desde Customer DNA."""
+    dna_df = _load_dna()
 
-    user_row = segs.filter(pl.col("user_id") == user_id)
+    user_row = dna_df.filter(pl.col("user_id") == user_id)
     if user_row.shape[0] == 0:
         return {"tipo": "general", "titulo": "Explora Hey Banco",
                 "descripcion": "Descubre todos los beneficios de Hey Banco.",
-                "accion": "Conocer más", "producto_relacionado": None}
+                "accion": "Conocer mas", "producto_relacionado": None}
 
-    cluster = int(user_row["cluster"][0])
-    if cluster == -1:
-        return {"tipo": "general", "titulo": "Explora Hey Banco",
-                "descripcion": "Tu perfil es único. Descubre productos personalizados.",
-                "accion": "Ver ofertas", "producto_relacionado": None}
+    accion = user_row["accion_proactiva"][0] if "accion_proactiva" in dna_df.columns else ""
+    if not accion:
+        return {"tipo": "general", "titulo": "Cliente bien atendido",
+                "descripcion": "Tus productos estan alineados a tu perfil financiero.",
+                "accion": "Explorar Hey Shop", "producto_relacionado": None}
 
-    for p in profiles:
-        if p["cluster_id"] == cluster:
-            return {
-                "tipo": "oferta_segmentada",
-                "titulo": p.get("accion_proactiva", "Recomendación para ti"),
-                "descripcion": p.get("descripcion", ""),
-                "accion": "Activar beneficio",
-                "producto_relacionado": p.get("nombre", ""),
-            }
-
-    return {"tipo": "general", "titulo": "Explora Hey Banco",
-            "descripcion": "Descubre todos los beneficios de Hey Banco.",
-            "accion": "Conocer más", "producto_relacionado": None}
+    return {
+        "tipo": "recomendacion_personalizada",
+        "titulo": accion,
+        "descripcion": "Basado en tu perfil financiero y patron de uso.",
+        "accion": "Activar beneficio",
+        "producto_relacionado": "customer_dna",
+    }
 
 
 TOOLS_DICT: list[dict] = [

@@ -207,7 +207,7 @@ def _build_dna(
             "Cliente bien atendido con productos alineados a su perfil."
         )
 
-    return " ".join(lines)
+    return " ".join(lines), "; ".join(oportunidades).capitalize() if oportunidades else ""
 
 
 def run_customer_dna(
@@ -338,8 +338,8 @@ def run_customer_dna(
         conv_n = cs.get("conv_count", 0)
         ch_counts = {"1": cs.get("n_text", 0), "2": cs.get("n_voice", 0)}
 
-        dna = _build_dna(uid, demo, prods, top_cats, tx_n, conv_n, ch_counts)
-        results.append({"user_id": uid, "dna_text": dna})
+        dna, accion = _build_dna(uid, demo, prods, top_cats, tx_n, conv_n, ch_counts)
+        results.append({"user_id": uid, "dna_text": dna, "accion_proactiva": accion})
 
         if (i + 1) % 500 == 0:
             bar = _progress_bar(i + 1, n_total)

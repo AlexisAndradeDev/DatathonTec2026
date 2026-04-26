@@ -12,6 +12,7 @@ from src.dashboard.utils.data_loader import (
     load_clients, load_products, load_transactions,
     load_segments, load_profiles, load_feature_matrix,
     get_user_ids, get_profile_for_user, get_dna_for_user,
+    get_action_for_user,
 )
 from src.dashboard.components.cards import (
     demographic_card, dna_card, product_card, score_gauge,
@@ -162,7 +163,7 @@ def run_customer_360() -> None:
             radar = radar_chart(user_vals, seg_vals, categories)
             st.plotly_chart(radar, use_container_width=True)
 
-        action = profile.get("accion_proactiva", "")
+        action = get_action_for_user(selected)
         if action:
             st.info(f"Que haria Havi? {action}")
     else:
