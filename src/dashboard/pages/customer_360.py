@@ -16,6 +16,7 @@ from src.dashboard.utils.data_loader import (
 )
 from src.dashboard.components.cards import (
     demographic_card, dna_card, product_card, score_gauge,
+    action_cards,
 )
 from src.dashboard.components.charts import radar_chart, donut_chart, gauge_chart
 
@@ -165,7 +166,8 @@ def run_customer_360() -> None:
 
         action = get_action_for_user(selected)
         if action:
-            st.info(f"Que haria Havi? {action}")
+            st.markdown("**Que haria Havi?**")
+            action_cards(action)
     else:
         st.info("Segmento no disponible (ruido)")
 

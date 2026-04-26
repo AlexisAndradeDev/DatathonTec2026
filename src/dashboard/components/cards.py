@@ -3,7 +3,7 @@
 import streamlit as st
 
 from src.dashboard.utils.styling import (
-    HEY_BLACK, HEY_GRAY_TEXT, HEY_PRIMARY, HEY_TEAL,
+    HEY_BLACK, HEY_GRAY_BG, HEY_GRAY_TEXT, HEY_PRIMARY, HEY_TEAL,
     HEY_CORAL, HEY_LIME, HEY_WHITE,
     hex_to_rgba,
 )
@@ -234,6 +234,51 @@ def quick_action_card(icon: str, label: str, desc: str = "",
             use_container_width=True,
             help=desc,
         )
+
+
+def _match_action_icon(action: str) -> str:
+    """Mapea una accion a un icono Material."""
+    a = action.lower()
+    if "tarjeta" in a or "credito" in a:
+        return ":material/credit_card:"
+    if "inversion" in a or "rendimient" in a:
+        return ":material/savings:"
+    if "seguro" in a:
+        return ":material/shield:"
+    if "atipico" in a or "inusual" in a:
+        return ":material/warning:"
+    if "reactivacion" in a:
+        return ":material/notifications:"
+    if "satisfaccion" in a:
+        return ":material/feedback:"
+    if "hey shop" in a:
+        return ":material/storefront:"
+    if "cashback" in a:
+        return ":material/redeem:"
+    if "reporte" in a or "gastos" in a:
+        return ":material/analytics:"
+    return ":material/auto_awesome:"
+
+
+def action_cards(accion_text: str) -> None:
+    """Renderiza acciones proactivas como cards individuales con iconos."""
+    if not accion_text:
+        return
+
+    actions = [a.strip().capitalize() for a in accion_text.split(";") if a.strip()]
+    if not actions:
+        return
+
+    for action in actions:
+        icon = _match_action_icon(action)
+        col_i, col_t = st.columns([0.06, 0.94])
+        with col_i:
+            st.markdown(icon)
+        with col_t:
+            st.markdown(
+                f'<span style="color:{HEY_BLACK};font-size:0.85rem;">{action}</span>',
+                unsafe_allow_html=True,
+            )
 
 
 def _get_initials(user_row: dict) -> str:
