@@ -118,17 +118,16 @@ def run_customer_360() -> None:
                     tasa=float(row.get("tasa_interes", 0) or 0),
                 )
 
-    # ── Row 2: DNA + Radar ──────────────────────────────
-    col1, col2 = st.columns([2, 1])
+    # ── Row 2: DNA full width ──────────────────────────
+    if dna_text:
+        dna_card(dna_text)
+    else:
+        st.info("Customer DNA no disponible (menos de 2 conversaciones)")
 
-    with col1:
-        if dna_text:
-            dna_card(dna_text)
-        else:
-            st.info("Customer DNA no disponible (menos de 2 conversaciones)")
-
-    with col2:
-        if profile:
+    # ── Row 3: Radar (centered) + Accion proactiva ─────
+    if profile:
+        col_a, col_r, col_c = st.columns([1, 2, 1])
+        with col_r:
             matrix = load_feature_matrix()
             seg_users = load_segments().filter(
                 pl.col("cluster") == profile["cluster_id"]
@@ -160,11 +159,11 @@ def run_customer_360() -> None:
             radar = radar_chart(user_vals, seg_vals, categories)
             st.plotly_chart(radar, use_container_width=True)
 
-            action = profile.get("accion_proactiva", "")
-            if action:
-                st.info(f"Que haria Havi? {action}")
-        else:
-            st.info("Segmento no disponible (ruido)")
+        action = profile.get("accion_proactiva", "")
+        if action:
+            st.info(f"Que haria Havi? {action}")
+    else:
+        st.info("Segmento no disponible (ruido)")
 
     # ── Row 3: Transactions + Category Donut ────────────
     st.markdown("---")

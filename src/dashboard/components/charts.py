@@ -132,21 +132,26 @@ def radar_chart(user_vals: dict, segment_vals: dict, categories: list[str]) -> g
         theta=display_labels,
         fill="toself",
         name="Usuario",
-        line_color=HEY_PRIMARY,
-        marker_color=HEY_PRIMARY,
+        line_color="#3366CC",
+        marker_color="#3366CC",
     ))
     fig.add_trace(go.Scatterpolar(
         r=[segment_vals.get(c, 0) for c in categories],
         theta=display_labels,
         fill="toself",
         name="Segmento",
-        line_color=HEY_TEAL,
-        marker_color=HEY_TEAL,
+        line_color="#FF9900",
+        marker_color="#FF9900",
         opacity=0.4,
     ))
     fig.update_layout(
         polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
-        **PLOT_LAYOUT, height=400, title="Usuario vs. Segmento",
+        margin=dict(l=40, r=40, t=60, b=40),
+        height=450,
+        title="Usuario vs. Segmento",
+        paper_bgcolor=HEY_GRAY_BG,
+        plot_bgcolor=HEY_WHITE,
+        font=dict(family="Inter, sans-serif", color=HEY_BLACK, size=11),
     )
     return fig
 
@@ -222,7 +227,8 @@ def donut_chart(labels: list[str], values: list[float], title: str = "",
     fig.update_layout(
         **PLOT_LAYOUT, height=height, title=title,
         showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5),
+        legend=dict(orientation="v", yanchor="middle", y=0.5,
+                    xanchor="left", x=1.02, font=dict(size=10)),
     )
     return fig
 
@@ -242,7 +248,7 @@ def gauge_chart(score: float, label: str = "Score", height: int = 200) -> go.Fig
         value=clamped,
         number={"font": {"size": 36, "family": "Inter, sans-serif", "color": HEY_BLACK}},
         gauge={
-            "axis": {"range": [0, 100], "tickwidth": 0, "tickfont": {"size": 0}},
+            "axis": {"range": [0, 100], "tickwidth": 0, "tickfont": {"size": 10}},
             "bar": {"color": color, "thickness": 0.15},
             "bgcolor": "#f0f0f0",
             "borderwidth": 0,

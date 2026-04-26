@@ -145,7 +145,7 @@ def score_gauge(score: float, label: str = "Salud Financiera") -> None:
         value=clamped,
         number={"font": {"size": 32, "family": "Inter, sans-serif", "color": HEY_BLACK}},
         gauge={
-            "axis": {"range": [0, 100], "tickwidth": 0, "tickfont": {"size": 0}},
+            "axis": {"range": [0, 100], "tickwidth": 0, "tickfont": {"size": 10}},
             "bar": {"color": color, "thickness": 0.2},
             "bgcolor": "#f0f0f0",
             "borderwidth": 0,
@@ -188,20 +188,17 @@ def product_card(tipo: str, saldo: float = 0, limite: float = 0,
         <div style="background:{HEY_WHITE};border-radius:10px;padding:0.85rem 1rem;
         box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:0.5rem;
         display:flex;align-items:center;gap:0.75rem;
-        border:1px solid #f0f0f0;transition:box-shadow 0.2s ease;"
-        onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,0.1)'"
-        onmouseout="this.style.boxShadow='0 1px 4px rgba(0,0,0,0.06)'">
+        border:1px solid #f0f0f0;transition:box-shadow 0.2s ease;">
             <div class="product-icon {cls}">{letter}</div>
             <div style="flex:1;min-width:0;">
                 <div style="font-weight:600;font-size:0.85rem;color:{HEY_BLACK};">
                 {tipo.replace('_',' ').title()}</div>
                 <div style="font-size:0.72rem;color:{HEY_GRAY_TEXT};">
-                Saldo: {saldo_fmt} &nbsp;|&nbsp; Limite: {limite_fmt}
+                Saldo: {saldo_fmt}{f" &nbsp;|&nbsp; Limite: {limite_fmt}" if limite else ""}
                 {f"&nbsp;|&nbsp; Tasa: {tasa:.1f}%" if tasa else ""}</div>
             </div>
             <div>
                 <span class="hey-tag {'teal' if estatus == 'activa' else 'gray'}">{estatus}</span>
-                {f'<span style="font-size:0.7rem;color:{HEY_GRAY_TEXT};display:block;text-align:right;margin-top:2px;">Uso: {utilizacion:.0f}%</span>' if utilizacion else ''}
             </div>
         </div>
         """,
