@@ -1,23 +1,25 @@
 .PHONY: validate enrich features cluster dashboard all clean
 
+VENV := .venv/bin
+
 validate:
-	python src/data/validate.py
+	$(VENV)/python src/data/validate.py
 
 enrich:
-	python src/enrichment/embeddings.py
-	python src/enrichment/intents.py
-	python src/enrichment/descriptions.py
-	python src/enrichment/customer_dna.py
+	$(VENV)/python src/enrichment/embeddings.py
+	$(VENV)/python src/enrichment/intents.py
+	$(VENV)/python src/enrichment/descriptions.py
+	$(VENV)/python src/enrichment/customer_dna.py
 
 features:
-	python src/features/build_matrix.py
+	$(VENV)/python src/features/build_matrix.py
 
 cluster:
-	python src/models/cluster.py
-	python src/models/segments.py
+	$(VENV)/python src/models/cluster.py
+	$(VENV)/python src/models/segments.py
 
 dashboard:
-	streamlit run src/dashboard/app.py
+	$(VENV)/streamlit run src/dashboard/app.py
 
 all: validate enrich features cluster
 	@echo "Pipeline completado. Ejecuta 'make dashboard' para Streamlit."
