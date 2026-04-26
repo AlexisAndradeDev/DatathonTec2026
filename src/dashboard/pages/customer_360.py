@@ -175,7 +175,7 @@ def run_customer_360() -> None:
     st.markdown("---")
     st.subheader("Actividad Reciente")
 
-    col1, col2 = st.columns([1.2, 1])
+    col1, col2 = st.columns([1, 1])
 
     with col1:
         user_tx = tx.filter(pl.col("user_id") == selected).sort(
@@ -203,7 +203,7 @@ def run_customer_360() -> None:
             cat_labels = cat_totals["categoria_mcc"].to_list()
             cat_vals = cat_totals["monto"].to_list()
             donut = donut_chart(cat_labels, cat_vals,
-                                "Gasto por Categoria", height=320)
+                                "Gasto por Categoria", height=400)
             st.plotly_chart(donut, use_container_width=True)
         else:
             st.caption("Sin datos transaccionales")
