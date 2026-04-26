@@ -9,7 +9,6 @@ import streamlit as st
 
 from src.dashboard.utils.data_loader import (
     load_transactions, load_havi, load_conv_intents,
-    load_segments, filter_by_segments,
 )
 from src.dashboard.components.charts import (
     heatmap_hora_dia, sankey_categories, sunburst_intents,
@@ -19,16 +18,8 @@ from src.dashboard.components.charts import (
 def run_analytics() -> None:
     st.title("Analytics")
 
-    seg_ids = st.session_state.get("global_segment_ids", [])
-    hey_pro_filter = st.session_state.get("global_hey_pro_filter", "Todos")
-
     tx = load_transactions()
-    if seg_ids:
-        tx = filter_by_segments(tx, seg_ids)
-
     havi = load_havi()
-    if seg_ids:
-        havi = filter_by_segments(havi, seg_ids, load_segments())
 
     # ── Top Metrics ─────────────────────────────────────
     m1, m2, m3, m4 = st.columns(4)
@@ -69,8 +60,6 @@ def run_analytics() -> None:
             st.subheader("Intenciones de Conversaciones")
             try:
                 ci = load_conv_intents()
-                if seg_ids:
-                    ci = filter_by_segments(ci, seg_ids)
                 sun = sunburst_intents(ci.to_pandas())
                 st.plotly_chart(sun, use_container_width=True)
             except Exception:
@@ -100,8 +89,6 @@ def run_analytics() -> None:
 
             try:
                 ci = load_conv_intents()
-                if seg_ids:
-                    ci = filter_by_segments(ci, seg_ids)
                 sentiment_counts = (
                     ci.group_by("sentiment").len().to_pandas()
                 )
@@ -123,10 +110,6 @@ def run_analytics() -> None:
 
         prods = load_products()
         clients = load_clients()
-
-        if seg_ids:
-            prods = filter_by_segments(prods, seg_ids)
-            clients = filter_by_segments(clients, seg_ids)
 
         st.subheader("Adopcion de Productos")
         tipo_counts = prods.group_by("tipo_producto").len().sort("len", descending=True)

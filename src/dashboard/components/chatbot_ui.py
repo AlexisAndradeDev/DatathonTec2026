@@ -121,7 +121,7 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
         # style
         style_parts = "padding:0.6rem 1rem;border-radius:14px;max-width:80%;"
         if role == "user" and content:
-            style_str = f"background:{HEY_PRIMARY};color:{HEY_BLACK};{style_parts}font-weight:500;"
+            style_str = f"background:{HEY_PRIMARY};color:{HEY_WHITE};{style_parts}font-weight:500;"
         elif role == "assistant" and content:
             style_str = f"background:{HEY_WHITE};border:1.5px solid {HEY_TEAL};color:{HEY_BLACK};{style_parts}"
         else:
@@ -161,7 +161,7 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
 
     with st.chat_message("user", avatar=":material/person:"):
         st.markdown(
-            f'<div style="background:{HEY_PRIMARY};color:{HEY_BLACK};'
+            f'<div style="background:{HEY_PRIMARY};color:{HEY_WHITE};'
             f'padding:0.6rem 1rem;border-radius:14px;display:inline-block;'
             f'max-width:80%;font-weight:500;">{prompt}</div>',
             unsafe_allow_html=True,

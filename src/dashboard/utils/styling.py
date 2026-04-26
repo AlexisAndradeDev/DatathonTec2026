@@ -1,20 +1,29 @@
-"""Tema Hey Banco -- paleta de colores oficial y CSS global para Streamlit."""
+"""Tema monocromatico blanco/negro -- paleta de colores y CSS global para Streamlit."""
 
 import streamlit as st
 from datetime import datetime
 
 
 # ── Tokens de color ────────────────────────────────────────────────────
-HEY_PRIMARY = "#FFD400"
+HEY_PRIMARY = "#1A1A1A"
 HEY_BLACK = "#1A1A1A"
 HEY_WHITE = "#FFFFFF"
-HEY_TEAL = "#00C9A7"
-HEY_CORAL = "#FF4F6D"
-HEY_LIME = "#C6F135"
+HEY_TEAL = "#444444"
+HEY_CORAL = "#777777"
+HEY_LIME = "#CCCCCC"
 HEY_GRAY_BG = "#F4F4F5"
 HEY_GRAY_TEXT = "#6B6B6B"
 HEY_CARD_SHADOW = "0 2px 8px rgba(0, 0, 0, 0.08)"
 HEY_HOVER_SHADOW = "0 4px 16px rgba(0, 0, 0, 0.12)"
+
+
+def hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:
+    """Convierte hex (#RRGGBB o #RGB) a rgba(r, g, b, alpha)."""
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
 
 
 def apply_hey_theme() -> None:
@@ -50,6 +59,10 @@ def apply_hey_theme() -> None:
         [data-testid="stSidebar"] * {{
             color: {HEY_WHITE};
         }}
+        [data-testid="stSidebarContent"] {{
+            display: flex;
+            flex-direction: column;
+        }}
         [data-testid="stSidebar"] .st-emotion-cache-1d8cy3q {{
             background-color: transparent;
         }}
@@ -62,8 +75,8 @@ def apply_hey_theme() -> None:
             margin: 2px 0;
         }}
         [data-testid="stSidebarNavLink"][aria-current="page"] {{
-            border-left: 3px solid {HEY_PRIMARY};
-            background-color: rgba(255, 212, 0, 0.12);
+            border-left: 3px solid {HEY_WHITE};
+            background-color: rgba(255, 255, 255, 0.12);
         }}
         [data-testid="stSidebarNavLink"]:hover {{
             background-color: rgba(255, 255, 255, 0.08);
@@ -104,7 +117,8 @@ def apply_hey_theme() -> None:
         .data-freshness {{
             font-size: 0.65rem;
             color: {HEY_GRAY_TEXT};
-            padding: 0.25rem 0.5rem;
+            padding: 0.75rem 0.5rem;
+            margin-top: auto;
             display: flex;
             align-items: center;
             gap: 0.25rem;
@@ -189,11 +203,11 @@ def apply_hey_theme() -> None:
 
         /* ── Hero Section ─────────────────────────────── */
         .hero-section {{
-            background: linear-gradient(135deg, rgba(255,212,0,0.08), rgba(0,201,167,0.06));
+            background: linear-gradient(135deg, #1A1A1A, #333333);
             border-radius: 16px;
             padding: 2rem 2.5rem;
             margin-bottom: 1.5rem;
-            border: 1px solid rgba(255,212,0,0.12);
+            border: 1px solid rgba(255,255,255,0.1);
         }}
         .hero-title {{
             font-size: 1.6rem;
@@ -224,7 +238,7 @@ def apply_hey_theme() -> None:
         /* ── Buttons ──────────────────────────────────── */
         .stButton > button {{
             background-color: {HEY_PRIMARY};
-            color: {HEY_BLACK};
+            color: {HEY_WHITE};
             font-weight: 700;
             border: none;
             border-radius: 8px;
@@ -232,8 +246,8 @@ def apply_hey_theme() -> None:
             transition: background-color 0.15s ease, transform 0.1s ease;
         }}
         .stButton > button:hover {{
-            background-color: #e6c200;
-            color: {HEY_BLACK};
+            background-color: #333333;
+            color: {HEY_WHITE};
             transform: translateY(-1px);
         }}
         .stButton > button:active {{
@@ -407,8 +421,8 @@ def apply_hey_theme() -> None:
             width: 56px;
             height: 56px;
             border-radius: 50%;
-            background: linear-gradient(135deg, {HEY_PRIMARY}, {HEY_TEAL});
-            color: {HEY_BLACK};
+            background: linear-gradient(135deg, {HEY_BLACK}, {HEY_GRAY_TEXT});
+            color: {HEY_WHITE};
             display: flex;
             align-items: center;
             justify-content: center;
@@ -429,10 +443,10 @@ def apply_hey_theme() -> None:
             font-weight: 700;
             flex-shrink: 0;
         }}
-        .product-icon.credito {{ background: {HEY_CORAL}22; color: {HEY_CORAL}; }}
-        .product-icon.debito {{ background: {HEY_TEAL}22; color: {HEY_TEAL}; }}
-        .product-icon.inversion {{ background: {HEY_PRIMARY}44; color: {HEY_BLACK}; }}
-        .product-icon.nomina {{ background: {HEY_LIME}44; color: {HEY_BLACK}; }}
+        .product-icon.credito {{ background: {hex_to_rgba(HEY_CORAL, 0.13)}; color: {HEY_CORAL}; }}
+        .product-icon.debito {{ background: {hex_to_rgba(HEY_TEAL, 0.13)}; color: {HEY_TEAL}; }}
+        .product-icon.inversion {{ background: {hex_to_rgba(HEY_PRIMARY, 0.27)}; color: {HEY_BLACK}; }}
+        .product-icon.nomina {{ background: {hex_to_rgba(HEY_LIME, 0.27)}; color: {HEY_BLACK}; }}
         .product-icon.default {{ background: {HEY_GRAY_BG}; color: {HEY_GRAY_TEXT}; }}
 
         /* ── Divider ───────────────────────────────────── */
@@ -476,7 +490,7 @@ def apply_hey_theme() -> None:
         }}
         .quick-action:hover {{
             border-color: {HEY_PRIMARY};
-            box-shadow: 0 2px 12px rgba(255, 212, 0, 0.15);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
         }}
         .quick-action-icon {{
             font-size: 1.5rem;
@@ -495,7 +509,7 @@ def apply_hey_theme() -> None:
 
         /* ── Info Box ──────────────────────────────────── */
         .info-box {{
-            background: {HEY_PRIMARY}18;
+            background: {hex_to_rgba(HEY_PRIMARY, 0.09)};
             border-left: 4px solid {HEY_PRIMARY};
             padding: 0.75rem 1rem;
             border-radius: 6px;

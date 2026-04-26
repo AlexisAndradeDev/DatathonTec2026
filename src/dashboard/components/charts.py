@@ -8,19 +8,12 @@ import plotly.graph_objects as go
 from src.dashboard.utils.styling import (
     HEY_PRIMARY, HEY_TEAL, HEY_CORAL, HEY_BLACK,
     HEY_GRAY_BG, HEY_GRAY_TEXT, HEY_WHITE,
+    hex_to_rgba,
 )
 
-
-def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:
-    """Convierte hex (#RRGGBB o #RGB) a rgba(r, g, b, alpha)."""
-    h = hex_color.lstrip("#")
-    if len(h) == 3:
-        h = "".join(c * 2 for c in h)
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    return f"rgba({r},{g},{b},{alpha})"
-
-HEY_COLORS = [HEY_PRIMARY, HEY_TEAL, HEY_CORAL, "#5B8FF9", "#FF9845",
-              "#A855F7", "#22C55E", "#EC4899", "#14B8A6", "#F43F5E"]
+HEY_COLORS = (
+    px.colors.qualitative.Plotly + px.colors.qualitative.Set1[:5]
+)
 
 PLOT_LAYOUT = dict(
     paper_bgcolor=HEY_GRAY_BG,
@@ -196,7 +189,7 @@ def sparkline(values: list[float], height: int = 55, color: str = HEY_PRIMARY) -
         mode="lines",
         line=dict(color=color, width=2),
         fill="tozeroy",
-        fillcolor=_hex_to_rgba(color, 0.19),
+        fillcolor=hex_to_rgba(color, 0.19),
         showlegend=False,
         hoverinfo="none",
     ))
@@ -282,7 +275,7 @@ def comparison_bars(seg_vals: dict, pop_vals: dict, label: str = "Feature",
     ))
     fig.add_trace(go.Bar(
         y=items, x=pop_list, name="Poblacion",
-        orientation="h", marker_color=HEY_TEAL + "60",
+        orientation="h", marker_color=hex_to_rgba(HEY_TEAL, 0.38),
         text=[f"{v:.2f}" for v in pop_list], textposition="outside",
         textfont=dict(size=10),
     ))

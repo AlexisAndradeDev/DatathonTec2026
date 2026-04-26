@@ -5,6 +5,7 @@ import streamlit as st
 from src.dashboard.utils.styling import (
     HEY_BLACK, HEY_GRAY_TEXT, HEY_PRIMARY, HEY_TEAL,
     HEY_CORAL, HEY_LIME, HEY_WHITE,
+    hex_to_rgba,
 )
 
 
@@ -149,9 +150,9 @@ def score_gauge(score: float, label: str = "Salud Financiera") -> None:
             "bgcolor": "#f0f0f0",
             "borderwidth": 0,
             "steps": [
-                {"range": [0, 40], "color": HEY_CORAL + "20"},
-                {"range": [40, 70], "color": HEY_PRIMARY + "20"},
-                {"range": [70, 100], "color": HEY_TEAL + "20"},
+                {"range": [0, 40], "color": hex_to_rgba(HEY_CORAL, 0.13)},
+                {"range": [40, 70], "color": hex_to_rgba(HEY_PRIMARY, 0.13)},
+                {"range": [70, 100], "color": hex_to_rgba(HEY_TEAL, 0.13)},
             ],
         },
         title={"text": label, "font": {"size": 13, "family": "Inter, sans-serif",
