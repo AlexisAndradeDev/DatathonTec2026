@@ -42,7 +42,6 @@ def run_chatbot() -> None:
     if st.session_state.chatbot_current_user != selected:
         st.session_state.chatbot_current_user = selected
         st.session_state.pop("havi_messages", None)
-        st.session_state.pop("tool_calls_cache", None)
         st.session_state.pop("chatbot_prompt_override", None)
 
     dna = get_dna_for_user(selected)

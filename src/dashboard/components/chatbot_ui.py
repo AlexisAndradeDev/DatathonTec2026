@@ -1,6 +1,5 @@
 """Chat UI reutilizable para Havi Next -- streaming + tool calls inline."""
 
-import json
 import os
 import sys
 import time
@@ -19,25 +18,6 @@ from src.dashboard.utils.styling import (
 def _on_chip_click(prompt: str) -> None:
     """Callback para chips de accion rapida: guarda el prompt en session state."""
     st.session_state.chatbot_prompt_override = prompt
-
-
-def _render_tool_card(tc: dict) -> None:
-    """Renderiza una tool call como tarjeta inline colapsable."""
-    with st.expander(
-        f"Herramienta: {tc['name']}", expanded=False,
-        icon=":material/build:",
-    ):
-        c1, c2 = st.columns(2)
-        with c1:
-            st.caption("Parametros")
-            st.code(tc.get("args", ""), language="json")
-        with c2:
-            st.caption("Resultado")
-            try:
-                parsed = json.loads(tc.get("result", "{}"))
-                st.json(parsed)
-            except Exception:
-                st.text(str(tc.get("result", ""))[:500])
 
 
 def _get_suggested_prompts(segment_name: str | None) -> list[dict]:
@@ -116,7 +96,6 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
                 "En que puedo apoyarte hoy?"
             )},
         ]
-        st.session_state.tool_calls_cache = {}
 
     # ── Render message history ────────────────────────
     for i, msg in enumerate(st.session_state.havi_messages):
@@ -147,12 +126,6 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
                     unsafe_allow_html=True,
                 )
 
-        # Tool calls for this message
-        tc_key = f"tc_{i}"
-        if tc_key in st.session_state.tool_calls_cache:
-            for tc in st.session_state.tool_calls_cache[tc_key]:
-                _render_tool_card(tc)
-
     # ── Chat input ────────────────────────────────────
     prompt = st.chat_input("Escribe tu mensaje...", key="havi_input")
 
@@ -177,7 +150,6 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
     with st.chat_message("assistant", avatar=":material/smart_toy:"):
         placeholder = st.empty()
         text_buffer = ""
-        tool_calls_shown = []
         showing_typing = True
 
         # Show typing indicator
@@ -216,7 +188,6 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
                         time.sleep(0.03)
                 elif chunk["type"] == "tool_call":
                     showing_typing = False
-                    tool_calls_shown.append(chunk)
                     placeholder.markdown(
                         f'<div style="background:{HEY_WHITE};'
                         f'border:1.5px solid {HEY_TEAL};'
@@ -242,11 +213,6 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
             f'{text_buffer}</div>',
             unsafe_allow_html=True,
         )
-
-    # Cache tool calls for this message
-    msg_idx = len(st.session_state.havi_messages)
-    if tool_calls_shown:
-        st.session_state.tool_calls_cache[f"tc_{msg_idx}"] = tool_calls_shown
 
     st.session_state.havi_messages.append({
         "role": "assistant",
