@@ -78,7 +78,7 @@ def _build_dna(
         ubicacion = f", reside en {estado}"
 
     lines = [
-        f"{sexo_txt}, {edad} anos{ubicacion}. "
+        f"{sexo_txt}, {edad} años {ubicacion}. "
         f"{art.capitalize()} {ocupacion} con ingreso mensual de ${ingreso:,} MXN"
         + (f", nivel educativo {educacion}" if educacion else "") + ".",
     ]

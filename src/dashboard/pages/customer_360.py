@@ -122,6 +122,7 @@ def run_customer_360() -> None:
 
     # ── Row 2: DNA full width ──────────────────────────
     if dna_text:
+        dna_text = dna_text.replace("anos", "años")
         dna_card(dna_text)
     else:
         st.info("Customer DNA no disponible (menos de 2 conversaciones)")

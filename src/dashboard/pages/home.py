@@ -20,7 +20,7 @@ from src.dashboard.components.charts import segment_treemap, sparkline
 
 def run_home() -> None:
     hero_section(
-        "Motor de Inteligencia & Atencion Personalizada",
+        "Havi Next",
         "Hey Banco  ·  DatathonTec 2026  ·  Segmentacion no supervisada + Chatbot RAG",
     )
 
@@ -82,7 +82,7 @@ def run_home() -> None:
     with col2:
         sparkline_kpi_card("CONVERSACIONES", f"{n_convs:,}", "Hilos unicos")
     with col3:
-        sparkline_kpi_card("VOLUMEN TOTAL TX", f"${tx_vol:,.0f}", "Monto transaccionado")
+        sparkline_kpi_card("VOLUMEN TOTAL TX", f"${tx_vol/1000000:,.2f} M", "Monto transaccionado")
     with col4:
         sparkline_kpi_card("TICKET PROMEDIO", f"${tx_avg:,.0f}", "Por transaccion")
 

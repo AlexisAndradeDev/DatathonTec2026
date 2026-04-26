@@ -26,7 +26,7 @@ def segment_card(profile: dict) -> None:
     col1, col2 = st.columns(2)
     with col1:
         st.metric("Tamano", f"{size:,}", f"{pct}% del total")
-        st.metric("Edad promedio", f"{stats.get('edad_promedio','?')} anos")
+        st.metric("Edad promedio", f"{stats.get('edad_promedio','?')} años")
         st.metric("Ingreso promedio", f"${stats.get('ingreso_promedio','?'):,.0f} MXN")
         st.metric("Hey Pro", f"{stats.get('hey_pro_pct','?')}%")
     with col2:

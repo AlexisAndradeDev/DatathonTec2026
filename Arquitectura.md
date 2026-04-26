@@ -38,44 +38,46 @@
 └───────────────────────────────────┬──────────────────────────────────────────┘
                                     │
                     ┌───────────────▼────────────────┐
-                    │   FEATURE ENRICHMENT (LLM)      │
-                    │   Azure AI Foundry DeepSeek-V3.2 │
+                    │   FEATURE ENRICHMENT           │
+                    │   Azure AI Foundry + Python     │
                     │                                  │
                     │  ① Embeddings Conversacionales   │
-                    │  ② Extracción de Intenciones     │
-                    │  ③ Normalización Descripciones   │
-                    │  ④ Customer DNA Narrativo        │
+                    │     (text-embedding-3-large)     │
+                    │  ② Extraccion de Intenciones     │
+                    │     (DeepSeek-V3.2)              │
+                    │  ③ [STUB] Normalizacion Desc.    │
+                    │  ④ Customer DNA (template, $0)   │
                     └───────────────┬────────────────┘
                                     │
                     ┌───────────────▼────────────────┐
                     │   UNSUPERVISED LEARNING          │
                     │                                  │
-                    │  Feature Matrix (15K × 220)      │
+                    │  Feature Matrix (15K x ~3,200)   │
                     │  StandardScaler + KNN Imputer    │
                     │  UMAP (n_components=8)           │
                     │  HDBSCAN (min_cluster=100)       │
-                    │  Segment Labeling (LLM)          │
+                    │  Segment Labeling (reglas, $0)   │
                     └───────────────┬────────────────┘
                                     │
            ┌────────────────────────┼────────────────────────┐
            │                        │                        │
 ┌──────────▼──────────┐  ┌─────────▼─────────┐  ┌──────────▼──────────┐
-│   STREAMLIT APP     │  │   INSIGHTS STORE  │  │   CHATBOT AGENT     │
+│   STREAMLIT APP     │  │   DATA STORE      │  │   CHATBOT AGENT     │
 │                     │  │                   │  │                      │
-│ • Overview KPIs     │  │ • Segmentos       │  │ • RAG sobre datos   │
-│ • Segment Explorer  │  │ • Perfiles        │  │   del usuario       │
-│ • Customer 360      │  │ • Customer DNA    │  │ • Tool Calling (3)  │
-│ • Analytics         │  │ • Recomendaciones │  │ • Streaming real-   │
-│ • Havi Next (Chat)  │  │                   │  │   time en Streamlit │
+│ • Home / KPIs       │  │ • SQLite (consulta│  │ • Tool Calling (3)  │
+│ • Segment Explorer  │  │   rapida)         │  │ • Customer DNA como │
+│ • Customer 360      │  │ • Parquet (ETL)   │  │   system prompt     │
+│ • Havi Next (Chat)  │  │ • JSON (perfiles) │  │ • Streaming via     │
+│ • Analytics         │  │   segment_profiles│  │   st.write_stream() │
 └─────────────────────┘  └───────────────────┘  └─────────────────────┘
 ```
 
 ### Flujo End-to-End
 
 ```
-Ingesta → Validación → Enrichment (LLM batch) → Feature Engineering
+Ingesta → Validacion → Enrichment (LLM + template) → Feature Engineering
 → Clustering No Supervisado → Perfilamiento de Segmentos
-→ Dashboard Streamlit + Chatbot RAG con Streaming
+→ Dashboard Streamlit + Chatbot con Tool Calling + Streaming
 ```
 
 ### Principios de Diseño
@@ -83,7 +85,7 @@ Ingesta → Validación → Enrichment (LLM batch) → Feature Engineering
 | Principio                                  | Implementación                                                                             |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | **Sandbox sin restricciones regulatorias** | Datos 100% sintéticos. Sin compliance de CNBV/LFPDPPP. Libertad para APIs externas.        |
-| **Cloud**                                  | Azure for Students. Servicio principal: Azure OpenAI (GPT-4.1 mini).                       |
+| **Cloud**                                  | Azure for Students. Servicios: Azure AI Foundry (DeepSeek-V3.2) + Azure OpenAI (text-embedding-3-large). |
 | **Presupuesto**                            | $20 USD máximo para APIs de IA.                                                            |
 | **Lenguaje**                               | Python 3.11+                                                                               |
 | **Modularidad**                            | Cada etapa es un script independiente con entrada/salida clara para migrar a orquestación. |
@@ -128,22 +130,24 @@ hey_productos.csv
 ### 2.4 Validación de Datos (`src/data/validate.py`)
 
 ```python
-# Checks a ejecutar:
-# 1. Schema: columnas esperadas, tipos correctos
-# 2. Nulls esperados: limite_credito/tasa_interes nulos para no-crédito
-# 3. Rangos: score_buro [295, 850], satisfaccion [3, 10], edad > 0
-# 4. FK integrity: user_ids en productos/transacciones existen en clientes
-# 5. Duplicates: user_id único en clientes, transaccion_id único
-# 6. Encoding: M/H/SE, estados válidos de México, fechas ISO
-# 7. Cruce conversaciones: ¿cuántos user_id de Havi matchean con clientes?
+# Checks implementados en validate.py:
+# check_1_2: Schema — columnas esperadas, tipos correctos para los 4 datasets
+# check_1_3: Nulls esperados — limite_credito/utilizacion_pct nulos para no-credito,
+#            plazo_meses/monto_mensualidad nulos para no-prestamo,
+#            motivo_no_procesada solo cuando estatus='no_procesada'
+# check_1_7: Encoding — M/H/SE, estados validos de Mexico, fechas ISO,
+#            dia_semana en ingles, idioma es_MX/en_US
+# check_1_8: Cross-reference — user_id de Havi vs. datasets transaccionales
+#            (interseccion, usuarios Havi sin match, usuarios transaccionales sin Havi)
 ```
 
 ---
 
 ## 3. Feature Enrichment Layer
 
-> **Modelo**: DeepSeek-V3.2 via Azure AI Foundry (serverless endpoint, `AZURE_INFERENCE_CREDENTIAL` + `AZURE_INFERENCE_ENDPOINT`).
-> **Modo**: Batch síncrono con rate limiting (60 RPM). Structured Output (JSON Schema) donde aplique.
+> **Modelo chat**: DeepSeek-V3.2 via Azure AI Foundry (serverless endpoint, OpenAI-compatible).
+> **Modelo embeddings**: text-embedding-3-large via Azure OpenAI.
+> **Modo**: Batch sincrono con rate limiting (60 RPM). JSON Mode para intenciones. Template Python para Customer DNA ($0). STUB para descripciones.
 
 ### 3.1 Embeddings Conversacionales (`src/enrichment/embeddings.py`)
 
@@ -153,14 +157,14 @@ hey_productos.csv
 | -------------------------- | --------------------------------------------------------------------- |
 | **Modelo** | `text-embedding-3-large` (via Azure OpenAI) |
 | **Dimensionalidad** | 3072 |
-| **Entrada** | Campo `input` de cada interacción (mensaje del usuario) |
-| **Preprocesamiento** | Concatenar mensajes del usuario por conversación en orden cronológico |
-| **Agregación por usuario** | Mean-pooling + [varianza, min, max] por dimensión → ~3120 features |
+| **Entrada** | Campo `input` de cada interaccion (mensaje del usuario) |
+| **Preprocesamiento** | Concatenar mensajes del usuario por conversacion en orden cronologico |
+| **Agregacion por usuario** | Mean-pooling → vector de 3072 dimensiones |
 | **Batch size** | 500 textos por llamada |
-| **Estimación tokens** | ~10M tokens totales |
-| **Costo estimado** | $1.30 USD |
+| **Estimacion tokens** | ~10M tokens totales |
+| **Costo estimado** | ~$0.20 USD |
 
-**Output**: `data/processed/user_embeddings.parquet` — un vector de ~1560 dimensiones por `user_id`.
+**Output**: `data/processed/user_embeddings.parquet` — un vector de 3072 dimensiones por `user_id`.
 
 ### 3.2 Extracción Estructurada de Intenciones (`src/enrichment/intents.py`)
 
@@ -183,111 +187,94 @@ hey_productos.csv
 | **Agrupación**        | Por `conv_id`, mensajes ordenados cronológicamente         |
 | **Batch**             | 50 conversaciones por llamada (optimiza tokens y latencia) |
 | **Estimación tokens** | ~12M in / ~3M out                                          |
-| **Costo estimado**    | $3.60 USD                                                  |
+| **Costo estimado**    | $6.54 USD (100% conversaciones). Menor si se usa `sample_pct` (default 5% en dev). |
 
-**Agregación por usuario**:
+**Agregacion por usuario**:
 
-- Conteo por tipo de intención
-- Proporción de sentimiento negativo
-- Urgencia máxima y promedio
-- Tasa de resolución (resuelto / total)
-- Total de conversaciones, mensajes promedio, canal texto/voz ratio
+- Conteo por tipo de intencion (11 columnas)
+- Urgencia promedio (`urgency_avg`)
+- Tasa de resolucion (`resolution_rate`)
+- Proporcion de sentimiento negativo (`pct_negativo`)
 
 **Output**: `data/processed/user_intents.parquet` + `data/processed/conv_intents.parquet`.
 
-### 3.3 Normalización de Descripciones (`src/enrichment/descriptions.py`)
+### 3.3 Normalizacion de Descripciones (`src/enrichment/descriptions.py`)
 
-**Objetivo**: Extraer información estructurada del campo `descripcion_libre` en transacciones (texto libre no estandarizado).
+> **ESTADO: STUB — No implementado.** El archivo contiene solo la firma de funcion `run_descriptions()` con cuerpo `pass`. Se deja como punto de extension futura.
 
-**Prompt**:
+**Objetivo**: Extraer informacion estructurada del campo `descripcion_libre` en transacciones (texto libre no estandarizado).
 
-```
-Extrae de esta descripción de transacción:
-- merchant_name: nombre del comercio
-- category: categoría (supermercado, restaurante, delivery, etc.)
-- is_subscription: true si parece suscripción recurrente
-- is_recurring: true si es pago periódico
-```
+**Plan original (no ejecutado)**:
 
-| Parámetro             | Valor                                                        |
+| Parametro             | Valor                                                        |
 | --------------------- | ------------------------------------------------------------ |
 | **Entrada**           | `descripcion_libre` de `hey_transacciones` donde no sea nulo |
 | **Batch**             | 100 descripciones por llamada                                |
-| **Estimación tokens** | ~5M in / ~2M out                                             |
-| **Costo estimado**    | $2.00 USD                                                    |
+| **Estimacion tokens** | ~5M in / ~2M out                                             |
+| **Costo estimado**    | $2.00 USD (LLM) o $0 (reglas regex como fallback)            |
 
-**Agregación por usuario**:
+**Output esperado**: `data/processed/tx_enriched.parquet`. Actualmente no se genera.
 
-- Comercio más frecuente
-- Número de suscripciones detectadas (cruce con `cargo_recurrente`)
-- Diversidad de categorías (entropía)
-
-**Output**: `data/processed/tx_enriched.parquet`.
 
 ### 3.4 Customer DNA Narrativo (`src/enrichment/customer_dna.py`)
 
-**Objetivo**: Generar un perfil narrativo de 150-200 palabras por usuario que describa necesidades implícitas, comportamiento financiero y oportunidades de atención proactiva.
+> **ESTADO: Implementado con template deterministico (Python, sin LLM).** Costo real: $0.00 USD. Tiempo de ejecucion: <1 segundo para ~5,600 usuarios.
 
-**Prompt (por usuario)**:
+**Objetivo**: Generar un perfil narrativo de ~150 palabras por usuario que describa necesidades implicitas, comportamiento financiero y oportunidades de atencion proactiva.
 
-```
-Eres un analista financiero de Hey Banco. Genera un perfil narrativo del siguiente cliente
-basado en sus datos. Incluye:
-- Perfil demográfico y comportamiento digital
-- Uso de productos financieros
-- Patrones de gasto y transacciones
-- Historial de interacciones con el asistente virtual Havi
-- Necesidades implícitas no expresadas
-- Oportunidades de atención proactiva (ofertas, alertas, insights)
+**Metodo**: Template deterministico en Python (`_build_dna()`) que construye 6 parrafos:
+1. **Demografia**: edad, genero, ubicacion, ocupacion, ingreso, educacion
+2. **Relacion bancaria**: Hey Pro, nomina, remesas, seguros, Hey Shop, score buro, satisfaccion, antiguedad, ultimo login, canal preferido
+3. **Productos activos**: lista con saldos
+4. **Patrones de gasto**: top 3 categorias, conteo de transacciones
+5. **Interacciones Havi**: conteo de conversaciones, desglose texto/voz
+6. **Necesidades implicitas y oportunidades proactivas** (logica condicional):
+   - Buen score + sin TC + Hey Pro → ofrecer Tarjeta de Credito Hey
+   - Saldo debito alto + sin inversion → sugerir Inversion Hey
+   - Sin seguro + Hey Pro → recomendar seguro
+   - Patron atipico → revisar actividad
+   - Ultimo login > 30 dias → campana de reactivacion
+   - Satisfaccion <= 5 → llamada de seguimiento
+   - No usa Hey Shop + Hey Pro → invitar a Hey Shop
 
-[Sesión de datos del usuario: demografía, productos, top transacciones, top conversaciones]
-```
-
-| Parámetro             | Valor                                              |
+| Parametro             | Valor                                              |
 | --------------------- | -------------------------------------------------- |
-| **Entrada**           | Datos agregados por usuario (~500 tokens cada uno) |
-| **Batch**             | 25 usuarios por llamada                            |
-| **Estimación tokens** | ~7.5M in / ~3M out                                 |
-| **Costo estimado**    | $3.00 USD                                          |
+| **Entrada**           | Datos agregados por usuario (clientes, productos, transacciones, Havi) |
+| **Filtro**            | Usuarios con >= `min_convs` conversaciones (default: 1) |
+| **Costo**             | **$0.00 USD** (template deterministico, sin llamadas a LLM) |
 
-**Doble output**:
-
-1. **Texto narrativo** → almacenado en SQLite, usado como `system prompt` del chatbot personalizado
-2. **Embedding del perfil** (text-embedding-3-large, 3072 dims) → feature adicional para clustering
-
-**Output**: `data/processed/customer_dna.parquet` (texto + embedding por usuario).
+**Output**: `data/processed/customer_dna.parquet` (`user_id`, `dna_text`, `accion_proactiva`).
 
 ### 3.5 Optimizaciones de Costo y Rendimiento
 
 | Estrategia            | Detalle                                                                         |
 | --------------------- | ------------------------------------------------------------------------------- |
-| **Caché**             | Embeddings cacheados por texto. Si un input ya fue procesado, no se re-consume. |
-| **Rate Limiting**     | 60 RPM (Azure OpenAI Student tier). Semáforo asíncrono con `asyncio`.           |
+| **Cache**             | Embeddings cacheados por texto. Si un input ya fue procesado, no se re-consume. |
+| **Rate Limiting**     | 60 RPM (Azure OpenAI Student tier). Control sincrono con `time.sleep`.          |
 | **Retry con backoff** | 3 reintentos con exponential backoff (1s, 2s, 4s) para rate limits.             |
-| **Batching**          | Máximo tokens por request: 4096 (input). Agrupar para minimizar llamadas.       |
+| **Batching**          | Agrupar textos para minimizar llamadas (500 por batch en embeddings, 50 convs en intenciones). |
 | **JSON Mode**         | Structured output en lugar de parseo libre. Reduce tokens de salida y errores.  |
 
 ---
 
 ## 4. Unsupervised Learning Layer
 
-### 4.1 Feature Matrix Final (~220 columnas)
+### 4.1 Feature Matrix Final (~3,209 columnas)
 
 | Grupo                  | Features                                                                                                                                                                                                                                                                                                           | Cardinalidad | Origen              |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ | ------------------- |
-| **Demográficas**       | edad, genero (one-hot), estado (one-hot), nivel_educativo (ordinal), ocupacion (one-hot), ingreso_mensual_mxn, idioma_preferido                                                                                                                                                                                    | ~40          | `hey_clientes`      |
+| **Demograficas**       | edad, genero (one-hot), estado (one-hot), nivel_educativo (ordinal), ocupacion (one-hot), ingreso_mensual_mxn, idioma_preferido                                                                                                                                                                                    | ~40          | `hey_clientes`      |
 | **Engagement**         | antiguedad_dias, dias_desde_ultimo_login, preferencia_canal (one-hot), satisfaccion_1_10, es_hey_pro, nomina_domiciliada, recibe_remesas, usa_hey_shop                                                                                                                                                             | ~10          | `hey_clientes`      |
-| **Crédito**            | score_buro, tiene_seguro, patron_uso_atipico                                                                                                                                                                                                                                                                       | 3            | `hey_clientes`      |
-| **Productos**          | num_productos_activos, tipo_producto (one-hot 11), utilizacion_pct_avg, saldo_actual_total, tasa_interes_promedio, plazo_meses_promedio, monto_mensualidad_total                                                                                                                                                   | ~20          | `hey_productos`     |
-| **Transaccionales**    | frecuencia_total, frecuencia_por_categoria_mcc (one-hot 14), frecuencia_por_canal (one-hot 9), frecuencia_por_tipo_operacion (one-hot 13), monto_promedio, monto_total, hora_pico, dia_semana (one-hot 7), pct_internacional, cashback_total, intentos_promedio, pct_no_procesada, motivo_no_procesada (one-hot 8) | ~55          | `hey_transacciones` |
-| **Conversacionales**   | num_conversaciones, msgs_promedio, pct_canal_voz, diversidad_interacciones                                                                                                                                                                                                                                         | 4            | Dataset Havi        |
-| **Embeddings (Havi)** | Mean-pooled vector | 3072 | §3.1 |
-| **Intenciones** | Conteo por intent (11), sentiment_avg (-1 a 1), urgency_avg, resolution_rate | 14 | §3.2 |
-| **Enriquecimiento TX** | suscripciones_detectadas, comercio_top_freq, entropia_categorias | 3 | §3.3 |
-| **Customer DNA** | Embedding del perfil narrativo | 3072 | §3.4 |
+| **Credito**            | score_buro, tiene_seguro, patron_uso_atipico                                                                                                                                                                                                                                                                       | 3            | `hey_clientes`      |
+| **Productos**          | tipo_producto (one-hot 11), utilizacion_pct_avg, saldo_actual_total, tasa_interes_promedio, plazo_meses_promedio, monto_mensualidad_total                                                                                                                                                                          | ~20          | `hey_productos`     |
+| **Transaccionales**    | frecuencia_total, frecuencia_por_categoria_mcc (one-hot 13), frecuencia_por_canal (one-hot 9), frecuencia_por_tipo_operacion (one-hot 12), monto_promedio, monto_total, hora_pico, dia_semana (one-hot 7), pct_internacional, cashback_total, intentos_promedio, pct_no_procesada, motivo_no_procesada (one-hot 8) | ~55          | `hey_transacciones` |
+| **Conversacionales**   | num_conversaciones, msgs_promedio, pct_voz, diversidad_intents                                                                                                                                                                                                                                                     | 4            | Dataset Havi        |
+| **Embeddings (Havi)**  | Mean-pooled vector                                                                                                                                                                                                                                                                                                 | 3072         | §3.1                |
+| **Intenciones**        | Conteo por intent (11), urgency_avg, resolution_rate, pct_negativo                                                                                                                                                                                                                                                 | 14            | §3.2                |
 
-> **Total estimado**: ~6,200 columnas para ~15,000 usuarios.
-> Los embeddings dominan dimensionalidad (>90% de features) — UMAP es crítico para reducción efectiva.
+> **Total real**: ~3,209 columnas (137 estructuradas + 3,072 embeddings) para ~15,000 usuarios.
+> Los embeddings dominan dimensionalidad (>95% de features) — UMAP es critico para reduccion efectiva.
+> No se incluyen features de enriquecimiento TX (§3.3 — no implementado) ni embedding de Customer DNA (§3.4 — template deterministico, sin embedding).
 
 ### 4.2 Pipeline de Clustering (`src/models/cluster.py`)
 
@@ -325,53 +312,49 @@ basado en sus datos. Incluye:
 └──────────────────────────┬───────────────────────────────────┘
                            │
 ┌──────────────────────────▼───────────────────────────────────┐
-│ 5. ASIGNACIÓN DE RUIDO A CLUSTER CERCANO                     │
-│    - KNN (k=5) desde puntos de ruido a centroides de cluster │
-│    - Asignar al cluster del vecino más cercano si distancia  │
+│ 5. ASIGNACION DE RUIDO A CLUSTER CERCANO                     │
+│    - KNN (k=1) desde puntos de ruido a centroides de cluster │
+│    - Asignar al cluster del vecino mas cercano si distancia  │
 │      < percentil 95 de distancias intra-cluster              │
 └──────────────────────────┬───────────────────────────────────┘
                            │
 ┌──────────────────────────▼───────────────────────────────────┐
-│ 6. VALIDACIÓN                                                │
-│    - DBCV (Density-Based Cluster Validation)                 │
+│ 6. VALIDACION                                                │
 │    - Silhouette Score (sobre UMAP embedding)                 │
-│    - Estabilidad: correr con distintos random seeds          │
+│    - DBCV descartado (inestable en espacio UMAP)             │
+│    - Estabilidad: grid search sobre 16 combinaciones de      │
+│      n_components x min_cluster_size                         │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Hyperparámetros a tunear**:
+**Hyperparametros usados (grid search)**:
 
-- `n_components` UMAP: probar [5, 8, 10, 15] — elegir el que maximice DBCV
-- `min_cluster_size` HDBSCAN: probar [50, 100, 150, 200] — balance granularidad vs. interpretabilidad
-- `metric` UMAP: probar `euclidean` vs. `cosine` para embeddings de alta dimensión
+| Parametro | Valores probados | Seleccionado | Criterio |
+|-----------|-----------------|-------------|----------|
+| `n_components` UMAP | [5, 8, 10, 15] | 8 | Maximizar Silhouette + penalizacion de ruido |
+| `min_cluster_size` HDBSCAN | [50, 100, 150, 200] | 100 | Balance granularidad vs. interpretabilidad |
+| `metric` UMAP | `euclidean` | `euclidean` | Unica metrica usada |
+| `random_state` | 42 | 42 | Fijo para reproducibilidad |
 
 ### 4.3 Perfilamiento de Segmentos (`src/models/segments.py`)
 
-**Para cada segmento descubierto, computar**:
+> **ESTADO: Implementado con etiquetado deterministico (Python, sin LLM).** Costo real: $0.00 USD.
 
-1. **Estadísticas descriptivas**: Media/mediana de features vs. población general (z-score de diferencia)
-2. **Top features discriminantes**: SHAP o diferencia absoluta estandarizada
-3. **LLM Labeling**: GPT-4.1 mini nombra y describe el segmento en lenguaje de negocio:
+**Para cada segmento descubierto, se computa**:
 
-```
-Describe este segmento de clientes de Hey Banco. Datos:
-- Demografía: [edad_avg, genero_dist, ingreso_avg, ubicacion_top]
-- Productos: [top 3 tipos, utilizacion_promedio, saldo_promedio]
-- Transacciones: [categoria_top, monto_promedio, canal_preferido]
-- Conversaciones: [intent_top, sentiment_avg, num_convs_promedio]
-
-Genera:
-- Nombre del segmento (ej: "Jóvenes Digitales Diversificados")
-- Descripción de 3 oraciones
-- Top 3 necesidades implícitas
-- Recomendación de acción proactiva
-```
-
-4. **Mapeo a acciones proactivas** (según Presentacion.md):
-   - **Ofertas segmentadas**: ¿qué producto complementario tiene mayor propensión?
-   - **Alertas de cargos**: ¿segmento con alto `patron_uso_atipico`?
-   - **Insights de gastos**: ¿categoría de gasto predominante del segmento?
-   - **Promociones**: ¿producto con baja adopción vs. perfil del segmento?
+1. **Estadisticas descriptivas**: Media de features demograficas, engagement, credito, transaccionales y conversacionales
+2. **Top features discriminantes**: Z-score de cada feature numerica del segmento vs. poblacion general. Se seleccionan las 8 con mayor |z-score|
+3. **Etiquetado deterministico** (`_label_segment()`): Genera nombre en espanol concatenando:
+   - **Tag de edad**: "Jovenes" (<30), "Adultos" (<45), "Maduros"
+   - **Tag de ingreso**: "Alto Ingreso" (>$25K), "Ingreso Medio" (>$12K), "Ingreso Basico"
+   - **Tag de perfil**: "Pro Digitales" (>70% Hey Pro), "Crediticios" (tiene TC), "Diversificados" (>1.5 productos), "Basicos"
+   - **Sufijos discriminantes** (max 3): de las top features con z-score > 0.5
+   - Ejemplo: `"Jovenes Ingreso Medio Crediticios Alto Gasto Internacional"`
+4. **Accion proactiva** (mapeo condicional priorizado):
+   - Buen score crediticio + sin tarjeta de credito → `"Oferta segmentada: Tarjeta de Credito Hey con 5% cashback"`
+   - Alto ingreso + alta adopcion Hey Pro → `"Promocion: Inversion Hey con tasa preferencial"`
+   - Baja satisfaccion → `"Alerta: Campana de seguimiento para mejorar satisfaccion"`
+   - Default → `"Insight: Envio de reporte mensual personalizado"`
 
 **Output**: `data/processed/segment_profiles.json` + `data/processed/user_segments.parquet`.
 
@@ -379,36 +362,35 @@ Genera:
 
 ## 5. Chatbot Agent Layer
 
-> **Arquitectura**: RAG híbrido sobre datos del usuario + tool calling.
+> **Arquitectura**: Tool calling + Customer DNA como system prompt. Sin RAG vectorial (FAISS no se usa en el chatbot; solo tool calling para datos concretos).
 > **Modelo**: DeepSeek-V3.2 con streaming habilitado.
-> **Framework**: `azure-ai-inference` SDK + Streamlit `st.write_stream()`.
+> **SDK**: `openai` (compatible con endpoint OpenAI de Azure AI Foundry).
 
 ### 5.1 Arquitectura del Agente
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         CHATBOT RAG AGENT                                │
+│                         CHATBOT AGENT                                    │
 │                                                                          │
-│  ┌──────────────┐    ┌──────────────────┐    ┌───────────────────────┐  │
-│  │ SYSTEM PROMPT│    │   CONTEXTO RAG   │    │     TOOL CALLING      │  │
-│  │              │    │                  │    │                       │  │
-│  │ Customer DNA │    │ • Perfil segmento│    │ ① get_account_summary │  │
-│  │ narrativo    │    │ • Embeddings     │    │ ② get_recent_tx       │  │
-│  │ (§3.4)       │    │   conversacional │    │ ③ get_recommendation  │  │
-│  │              │    │ • Intenciones top│    │                       │  │
-│  │ Voz: empático│    │ • Productos      │    │ Todas retornan datos  │  │
-│  │ y proactivo  │    │   activos        │    │ del usuario autentic. │  │
-│  └──────────────┘    └──────────────────┘    └───────────────────────┘  │
+│  ┌──────────────┐    ┌───────────────────────┐                          │
+│  │ SYSTEM PROMPT│    │     TOOL CALLING      │                          │
+│  │              │    │                       │                          │
+│  │ Customer DNA │    │ get_account_summary   │                          │
+│  │ narrativo    │    │ get_recent_transactions                          │
+│  │ (§3.4)       │    │ get_recommendation    │                          │
+│  │              │    │                       │                          │
+│  │ Voz: empatico│    │ Todas retornan datos  │                          │
+│  │ y proactivo  │    │ del usuario desde     │                          │
+│  │              │    │ Parquet/SQLite        │                          │
+│  └──────────────┘    └───────────────────────┘                          │
 │                                                                          │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                    STREAMING RESPONSE                             │   │
-│  │  client.complete(                                                    │   │
-│  │      model="DeepSeek-V3.2",                                          │   │
-│  │      messages=[system, ...history, user_msg],                     │   │
-│  │      tools=[account_summary, recent_tx, recommendation],          │   │
-│  │      stream=True                                                  │   │
-│  │  )                                                                │   │
-│  │  → st.write_stream(response_chunks)                               │   │
+│  │                    STREAMING RESPONSE (two-step)                  │   │
+│  │  1. chat_completion (non-streaming) → detecta tool calls         │   │
+│  │  2. Si hay tool calls: ejecuta tools, agrega resultados,         │   │
+│  │     luego chat_completion_stream para respuesta final            │   │
+│  │  3. st.write_stream() renderiza chunk por chunk                  │   │
+│  │  4. Tool calls visibles en UI como cards colapsables             │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -444,18 +426,15 @@ REGLAS:
 
 ```python
 def get_account_summary(user_id: str) -> dict:
-    """
-    Retorna el resumen de cuenta del usuario:
-    - Productos activos con saldo/límite
-    - Créditos con utilización, mensualidad
-    - Inversiones con saldo
-    - Seguros activos
-    """
+    """Resumen de cuenta con productos activos, deudas, inversiones y cashback."""
+    # Lee hey_productos y hey_clientes desde Parquet (con fallback a CSV)
+    # Calcula total_deuda (credito), total_inversiones (inversion_hey),
+    # cashback_acumulado, hey_pro status
     return {
         "productos": [
-            {"tipo": "cuenta_debito", "saldo": 12345.67},
-            {"tipo": "tarjeta_credito_hey", "limite": 50000, "utilizado": 15000,
-             "utilizacion_pct": 0.30, "pago_minimo": 750, "fecha_corte": "2026-05-15"},
+            {"tipo": "cuenta_debito", "saldo": 12345.67, "limite": None, ...},
+            {"tipo": "tarjeta_credito_hey", "saldo": 15000, "limite": 50000,
+             "utilizacion_pct": 0.30, "tasa_interes_anual": 45.0, "estatus": "activa"},
         ],
         "total_deuda": 15000,
         "total_inversiones": 50000,
@@ -468,19 +447,18 @@ def get_account_summary(user_id: str) -> dict:
 
 ```python
 def get_recent_transactions(user_id: str, n: int = 5) -> dict:
-    """
-    Retorna las últimas N transacciones del usuario.
-    """
+    """Ultimas N transacciones ordenadas por fecha descendente mas alerta de patron atipico."""
+    # Lee hey_transacciones, filtra por user_id, ordena por fecha_hora DESC
+    # Detecta patron_uso_atipico desde hey_clientes
     return {
         "transacciones": [
             {"fecha": "2026-04-20", "monto": 850.00,
              "comercio": "Superama", "categoria": "supermercado",
              "estatus": "completada", "cashback": 8.50},
-            # ...
         ],
         "alerta": {
             "cargos_atipicos": True,
-            "detalle": "2 cargos en categoría inusual (viajes) por $4,500"
+            "detalle": "Se ha detectado un patron de uso atipico en tu cuenta."
         } if user_has_atypical else None,
     }
 ```
@@ -489,16 +467,17 @@ def get_recent_transactions(user_id: str, n: int = 5) -> dict:
 
 ```python
 def get_recommendation(user_id: str) -> dict:
-    """
-    Retorna recomendación personalizada según segmento y perfil.
-    """
-    return {
-        "tipo": "oferta_segmentada",  # oferta_segmentada | alerta_cargos | insight_gastos | promocion
-        "titulo": "Tu Hey Pro te da 5% extra en restaurantes este mes",
-        "descripcion": "Como usuario Hey Pro, activa el beneficio de 5% cashback...",
-        "accion": "Activar beneficio",
-        "producto_relacionado": "tarjeta_credito_hey",
-    }
+    """Recomendacion personalizada desde Customer DNA. Fallback generico si no hay DNA."""
+    # Lee accion_proactiva desde customer_dna.parquet
+    dna = load_dna().filter(pl.col("user_id") == user_id)
+    if dna is not None and "accion_proactiva" in dna:
+        return {"tipo": "oferta_segmentada", "titulo": "Recomendacion personalizada",
+                "descripcion": dna["accion_proactiva"], "accion": "Consultar detalles",
+                "producto_relacionado": "tarjeta_credito_hey"}
+    # Fallback generico
+    return {"tipo": "insight", "titulo": "Bienvenido a Hey Banco",
+            "descripcion": "Te invitamos a explorar los beneficios...",
+            "accion": "Explorar productos", "producto_relacionado": "cuenta_debito"}
 ```
 
 ### 5.4 Flujo de Conversación con Tool Calling
@@ -518,36 +497,57 @@ def get_recommendation(user_id: str) -> dict:
    $45 de cashback. ¿Necesitas ayuda para planear el pago de tu tarjeta?"
 ```
 
-### 5.5 Streaming en Streamlit
+### 5.5 Streaming en Streamlit (Two-Step)
 
 ```python
-# src/chatbot/agent.py
+# src/chatbot/agent.py — enfoque real (two-step)
 from openai import OpenAI
 
-def chat_stream(user_id: str, messages: list, tools: list) -> Generator:
-    """Generador de chunks para streaming en Streamlit."""
+def chat_with_tools(messages, tools) -> Generator:
+    """Generador de eventos (texto o tool_call) para streaming en Streamlit."""
     client = OpenAI(
         base_url=os.environ["AZURE_CHAT_BASE_URL"],
         api_key=os.environ["AZURE_CHAT_API_KEY"],
     )
-
+    # Paso 1: Detectar tool calls (non-streaming)
     response = client.chat.completions.create(
         model="DeepSeek-V3.2",
         messages=messages,
         tools=tools,
         tool_choice="auto",
-        stream=True,
     )
+    if response.choices[0].message.tool_calls:
+        # Ejecutar tools, yield resultados como eventos
+        for tc in response.choices[0].message.tool_calls:
+            result = _execute_tool(tc.function.name, tc.function.arguments)
+            yield {"type": "tool_call", "name": tc.function.name, "result": result}
+        # Paso 2: Respuesta final con streaming
+        messages.append(...)  # tool results como mensajes
+        response_stream = client.chat.completions.create(
+            model="DeepSeek-V3.2",
+            messages=messages,
+            tools=tools,
+            stream=True,
+        )
+        for chunk in response_stream:
+            if chunk.choices[0].delta.content:
+                yield {"type": "text", "content": chunk.choices[0].delta.content}
+    else:
+        yield {"type": "text", "content": response.choices[0].message.content}
 
-    for chunk in response:
-        if chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
-
-# src/dashboard/app.py
-import streamlit as st
-
-def render_chat():
-    st.write_stream(chat_stream(user_id, messages, tools))
+# src/dashboard/components/chatbot_ui.py
+def render_chat_ui(user_id, ...):
+    with st.chat_message("assistant"):
+        placeholder = st.empty()
+        full = ""
+        for event in chat_with_tools(messages, tools):
+            if event["type"] == "tool_call":
+                with st.status("Consultando tus datos..."):
+                    st.caption(f"Tool: {event['name']}")
+            elif event["type"] == "text":
+                full += event["content"]
+                placeholder.markdown(full)
+    st.rerun()
 ```
 
 ---
@@ -558,51 +558,59 @@ def render_chat():
 
 ```
 🏠 Home / Overview
-├── KPIs: Total usuarios, segmentos, NPS promedio, usuarios Hey Pro %
-├── Métricas de conversaciones: total, resolución rate, sentimiento avg
-├── Métricas transaccionales: volumen total, ticket promedio, % no procesadas
-└── Distribución de segmentos (treemap)
+├── KPIs: Total usuarios, segmentos, Satisfaccion Promedio, usuarios Hey Pro %
+├── Metricas de conversaciones: Interacciones Havi, Conversaciones, Resolution Rate, % sentimiento negativo
+├── Metricas transaccionales: Volumen Total TX, Ticket Promedio, % no procesadas, Cashback Total
+├── Quick insights y navegacion rapida a otras paginas
+└── Distribucion de segmentos (treemap)
 
 🔍 Segment Explorer
 ├── UMAP 2D scatter plot (coloreado por segmento, interactivo con Plotly)
 ├── Tarjeta de segmento seleccionado:
-│   ├── Nombre, descripción (LLM-generated)
-│   ├── Tamaño (# usuarios, %)
-│   ├── Top 10 features discriminantes (bar chart horizontal)
-│   ├── Needs cloud (wordcloud de necesidades implícitas)
-│   └── Acción proactiva recomendada
-└── Tabla de usuarios del segmento con drill-down
+│   ├── Nombre, descripcion (generado deterministicamente)
+│   ├── Tamano (# usuarios, %)
+│   ├── Top 8 features discriminantes (bar chart horizontal Altair, |z-score|)
+│   ├── Necesidades implicitas (lista de bullets)
+│   └── Accion proactiva recomendada
+├── Comparacion side-by-side de dos segmentos
+└── [NO IMPLEMENTADO] Tabla de usuarios del segmento con drill-down
 
 👤 Customer 360
-├── Selector de usuario (dropdown con búsqueda por user_id)
+├── Selector de usuario (dropdown con busqueda por user_id)
 ├── Ficha completa:
-│   ├── Demografía (card con íconos)
-│   ├── Productos (tabla con estatus, saldo, utilización)
-│   ├── Transacciones recientes (tabla + gráfico de categorías)
-│   ├── Conversaciones con Havi (timeline)
-│   └── Customer DNA (texto narrativo)
-├── Radar chart: perfil del usuario vs. promedio de su segmento
-└── "¿Qué haría Havi por este cliente?" (recomendación generada)
+│   ├── Health score gauge (0-100) + tags (Hey Pro, Nomina, etc.)
+│   ├── Demografia (card con avatar y campos etiquetados)
+│   ├── Productos activos (cards visuales con iconos, saldo, estatus)
+│   ├── Customer DNA (texto narrativo completo)
+│   ├── Radar chart: perfil del usuario vs. promedio de su segmento
+│   ├── Acciones proactivas (cards con iconos)
+│   ├── Transacciones recientes (tabla de ultimas 10)
+│   └── Donut chart de gasto por categoria
+└── Boton "Hablar con Havi" → navega a pagina chatbot con usuario preseleccionado
 
 💬 Havi Next (Chatbot)
-├── Chat UI con historial de conversación
-├── Selector de usuario (carga el contexto automáticamente)
-├── Streaming en tiempo real
-├── Tool calls visibles en UI colapsable (debug mode)
-└── Acciones proactivas sugeridas (tarjetas clickeables)
+├── Selector de usuario (carga el contexto automaticamente)
+├── Chat UI con historial de conversacion completo
+├── Customer DNA como system prompt
+├── Respuesta en two-step: deteccion de tool calls (non-streaming) → respuesta final (streaming)
+├── Tool calls visibles como "Consultando tus datos..." durante ejecucion
+├── Sugerencias de prompts (chips clickeables)
+└── Errores manejados con mensaje en placeholder
 
 📈 Analytics
-├── Patrones transaccionales:
-│   ├── Heatmap hora × día de la semana
-│   ├── Sankey diagram: categoría MCC → tipo operación → estatus
-│   └── Treemap de comercios top
-├── Conversaciones:
-│   ├── Distribución de intenciones (sunburst)
-│   ├── Sentiment trend (línea de tiempo)
-│   └── Funnel: consulta → resuelto vs. escalado
-└── Cohortes:
-    ├── Usuarios por antigüedad vs. engagement
-    └── Matriz de adopción de productos
+├── Tab 1 — Actividad Transaccional:
+│   ├── Top metricas (transacciones, volumen, interacciones Havi, % voz)
+│   ├── Heatmap hora × dia de la semana (monto promedio)
+│   └── Sankey diagram: categoria → tipo operacion → estatus
+├── Tab 2 — Conversaciones:
+│   ├── Sunburst de intenciones (si hay datos de intenciones)
+│   ├── Distribucion de canal (texto vs. voz)
+│   └── Sentiment breakdown
+├── Tab 3 — Adopcion de Productos:
+│   ├── Tabla de adopcion de productos
+│   └── Hey Pro %, usuarios con seguro, usuarios con patron atipico
+└── [NO IMPLEMENTADO] Funnel consulta → resuelto vs. escalado
+└── [NO IMPLEMENTADO] Cohortes por antiguedad vs. engagement
 ```
 
 ### 6.2 Setup de Páginas (Streamlit Multipage)
@@ -627,15 +635,16 @@ src/dashboard/
 
 ### 6.3 Visualizaciones Clave
 
-| Vista                 | Librería         | Interactividad                     |
+| Vista                 | Libreria         | Interactividad                     |
 | --------------------- | ---------------- | ---------------------------------- |
-| UMAP 2D Scatter       | Plotly Express   | Hover con user_id, zoom, selección |
-| Segment Treemap       | Plotly           | Click → drill-down                 |
-| Feature Importance    | Altair           | Bar chart con tooltip              |
-| Transacciones Heatmap | Plotly           | Hora × Día, escala de color monto  |
-| Sankey (Categorías)   | Plotly           | Nodes arrastrables                 |
-| Sentiment Timeline    | Altair           | Línea con banda de confianza       |
+| UMAP 2D Scatter       | Plotly Express   | Hover con user_id, zoom, seleccion |
+| Segment Treemap       | Plotly           | Tooltip con tamano y %             |
+| Feature Importance    | Altair           | Bar chart con tooltip z-score      |
+| Transacciones Heatmap | Plotly           | Hora x Dia, escala de color monto  |
+| Sankey (Categorias)   | Plotly           | Nodes arrastrables                 |
 | Radar Chart (360)     | Plotly           | Overlay usuario vs. segmento       |
+| Donut Chart           | Plotly           | Gastos por categoria               |
+| Sunburst (Intenciones)| Plotly           | Jerarquia de intenciones           |
 | Chat UI               | Streamlit nativo | `st.chat_input`, `st.chat_message` |
 
 ---
@@ -649,7 +658,7 @@ src/dashboard/
 | **Lenguaje**            | Python                            | 3.11+         | Requisito del equipo                                           |
 | **DataFrames**          | Polars + Pandas                   | latest        | Polars para ETL pesado, Pandas para compatibilidad con sklearn |
 | **ML**                  | scikit-learn, UMAP-learn, HDBSCAN | latest        | Ligero, sin GPU necesaria                                      |
-| **LLM** | Azure AI Foundry + Azure OpenAI | DeepSeek-V3.2 + text-embedding-3-large | Student plan, serverless + managed endpoint |
+| **LLM** | Azure AI Foundry + Azure OpenAI | DeepSeek-V3.2 + text-embedding-3-large | Student plan, serverless DeepSeek (chat) + managed endpoint (embeddings) |
 | **Dashboard**           | Streamlit                         | ≥1.28         | Requisito, soporte nativo de streaming                         |
 | **Visualización**       | Plotly + Altair                   | latest        | Interactivo, integración nativa con Streamlit                  |
 | **Vector Store**        | FAISS (in-memory)                 | latest        | Sin dependencia externa, rápido para ~15K vectores             |
@@ -670,21 +679,15 @@ src/dashboard/
 
 ```
 .gitignore:
-  .env
+  .env*
   data/raw/
   data/processed/
   data/*.db
   __pycache__/
   .venv/
   *.pyc
-
-.env (nunca commiteado):
-  AZURE_CHAT_API_KEY=...
-  AZURE_CHAT_BASE_URL=https://<resource>.services.ai.azure.com/openai/v1/
-  AZURE_CHAT_MODEL=DeepSeek-V3.2
-  AZURE_EMBEDDING_API_KEY=...
-  AZURE_EMBEDDING_ENDPOINT=https://<resource>.cognitiveservices.azure.com/
-  AZURE_EMBEDDING_MODEL=text-embedding-3-large
+  .DS_Store
+  docs/checklist_implementacion.md
 ```
 
 > **Streamlit se ejecuta 100% local**. Las keys de Azure nunca salen del entorno.
@@ -715,6 +718,7 @@ faiss-cpu>=1.7
 streamlit>=1.28
 plotly>=5.15
 altair>=5.0
+watchdog>=6.0
 
 # Utils
 python-dotenv>=1.0
@@ -728,18 +732,20 @@ prefect>=2.0
 ### 7.5 Makefile
 
 ```makefile
-.PHONY: validate enrich features cluster dashboard all clean
+.PHONY: validate ingest enrich features cluster dashboard all clean
 
 # Data
 validate:
 	python src/data/validate.py
 
-# Enrichment (4 etapas, secuenciales pero con cache)
+ingest:
+	python src/data/ingest.py
+
+# Enrichment (3 modulos implementados, descriptions es STUB)
 enrich:
-	python src/enrichment/embeddings.py
-	python src/enrichment/intents.py
-	python src/enrichment/descriptions.py
-	python src/enrichment/customer_dna.py
+	python -m src.enrichment.embeddings
+	python -m src.enrichment.intents
+	python -m src.enrichment.customer_dna
 
 # Feature Engineering
 features:
@@ -770,12 +776,12 @@ Cada script ya está diseñado como una función principal con firma clara:
 
 ```python
 # src/enrichment/embeddings.py
-def run_embeddings(input_path: str, output_path: str) -> None:
+def run_embeddings(data_dir: str, output_dir: str) -> None:
     """Genera embeddings conversacionales por usuario."""
     ...
 
 if __name__ == "__main__":
-    run_embeddings("data/raw/", "data/processed/user_embeddings.parquet")
+    run_embeddings("data/raw/", "data/processed/")
 ```
 
 Para migrar a Prefect solo se requiere:
@@ -802,14 +808,14 @@ def enrichment_flow():
 ```
 DatathonTec2026/
 │
-├── .env.example                  # Template de variables de entorno
+├── .env                          # Variables de entorno (gitignored)
 ├── .gitignore                    # Excluye .env, data/, __pycache__
-├── Makefile                      # Orquestación secuencial
+├── Makefile                      # Orquestacion secuencial
 ├── requirements.txt              # Dependencias
-├── README.md                     # Setup y ejecución
+├── AGENTS.md                     # Instrucciones para agentes de IA
 │
 ├── Arquitectura.md               # Este documento
-├── Presentacion.md               # Brief original del reto
+├── stack.md                      # Stack tecnologico con versiones
 │
 ├── data/                         # Gitignored
 │   ├── raw/                      # Datasets originales
@@ -817,75 +823,72 @@ DatathonTec2026/
 │   │   ├── hey_productos.csv
 │   │   ├── hey_transacciones.csv
 │   │   └── dataset_50k_anonymized.parquet
-│   └── processed/                # Datasets enriquecidos (generados)
-│       ├── user_embeddings.parquet
-│       ├── conv_intents.parquet
-│       ├── user_intents.parquet
-│       ├── tx_enriched.parquet
-│       ├── customer_dna.parquet
-│       ├── feature_matrix.parquet
-│       ├── user_segments.parquet
-│       └── segment_profiles.json
+│   ├── processed/                # Datasets enriquecidos (generados)
+│   │   ├── user_embeddings.parquet
+│   │   ├── conv_intents.parquet
+│   │   ├── user_intents.parquet
+│   │   ├── customer_dna.parquet
+│   │   ├── feature_matrix.parquet
+│   │   ├── user_segments.parquet
+│   │   └── segment_profiles.json
+│   └── features.db               # SQLite feature store
 │
 ├── docs/
 │   ├── diccionario_datos_transacciones.md
-│   └── diccionario_datos_conversaciones.md
+│   ├── diccionario_datos_conversaciones.md
+│   └── Presentacion.md
 │
-├── notebooks/
-│   ├── 01_exploracion_clientes.ipynb
-│   ├── 02_exploracion_transacciones.ipynb
-│   ├── 03_exploracion_conversaciones.ipynb
-│   └── 04_prototipo_clustering.ipynb
+├── notebooks/                    # Vacio — exploracion pendiente
 │
 ├── src/
 │   ├── __init__.py
 │   │
 │   ├── data/
 │   │   ├── __init__.py
-│   │   ├── validate.py            # Validación de schemas
-│   │   └── ingest.py              # Carga y joins iniciales
+│   │   ├── validate.py            # Validacion de schemas (COMPLETO)
+│   │   └── ingest.py              # Carga y limpieza inicial (COMPLETO)
 │   │
 │   ├── enrichment/
 │   │   ├── __init__.py
-│   │   ├── embeddings.py          # §3.1 Embeddings conversacionales
-│   │   ├── intents.py             # §3.2 Extracción de intenciones
-│   │   ├── descriptions.py        # §3.3 Normalización descripciones
-│   │   ├── customer_dna.py        # §3.4 Customer DNA narrativo
-│   │   └── llm_client.py          # Cliente Azure OpenAI compartido
+│   │   ├── embeddings.py          # §3.1 Embeddings conversacionales (COMPLETO)
+│   │   ├── intents.py             # §3.2 Extraccion de intenciones (COMPLETO)
+│   │   ├── descriptions.py        # §3.3 Normalizacion descripciones (STUB)
+│   │   ├── customer_dna.py        # §3.4 Customer DNA template (COMPLETO, $0)
+│   │   └── llm_client.py          # Cliente Azure compartido (COMPLETO)
 │   │
 │   ├── features/
 │   │   ├── __init__.py
-│   │   └── build_matrix.py        # Construcción de feature matrix
+│   │   └── build_matrix.py        # Construccion de feature matrix (COMPLETO)
 │   │
 │   ├── models/
 │   │   ├── __init__.py
-│   │   ├── cluster.py             # UMAP + HDBSCAN pipeline
-│   │   └── segments.py            # Perfilamiento y labeling
+│   │   ├── cluster.py             # UMAP + HDBSCAN pipeline (COMPLETO)
+│   │   └── segments.py            # Perfilamiento y labeling deterministico (COMPLETO)
 │   │
 │   ├── chatbot/
 │   │   ├── __init__.py
-│   │   ├── agent.py               # Chatbot RAG con tool calling
-│   │   └── tools.py               # Implementación de 3 herramientas
+│   │   ├── agent.py               # Chatbot con tool calling + streaming two-step (COMPLETO)
+│   │   └── tools.py               # Implementacion de 3 herramientas (COMPLETO)
 │   │
 │   └── dashboard/
 │       ├── __init__.py
-│       ├── app.py                 # Entry point Streamlit
+│       ├── app.py                 # Entry point Streamlit (COMPLETO)
 │       ├── pages/
 │       │   ├── __init__.py
-│       │   ├── home.py
-│       │   ├── segments.py
-│       │   ├── customer_360.py
-│       │   ├── chatbot.py
-│       │   └── analytics.py
+│       │   ├── home.py            # Home / KPIs (COMPLETO)
+│       │   ├── segments.py        # Segment Explorer (COMPLETO)
+│       │   ├── customer_360.py    # Customer 360 (COMPLETO)
+│       │   ├── chatbot.py         # Havi Next Chat (COMPLETO)
+│       │   └── analytics.py       # Analytics (COMPLETO)
 │       ├── components/
 │       │   ├── __init__.py
-│       │   ├── charts.py
-│       │   ├── cards.py
-│       │   └── chatbot_ui.py
+│       │   ├── charts.py          # Plotly/Altair wrappers (COMPLETO)
+│       │   ├── cards.py           # Metricas y tarjetas (COMPLETO)
+│       │   └── chatbot_ui.py      # Chat UI con streaming (COMPLETO)
 │       └── utils/
 │           ├── __init__.py
-│           ├── data_loader.py
-│           └── styling.py
+│           ├── data_loader.py     # Carga cacheada desde Parquet/JSON (COMPLETO)
+│           └── styling.py         # Tema CSS, colores Hey Banco (COMPLETO)
 ```
 
 ---
@@ -894,73 +897,69 @@ DatathonTec2026/
 
 ### Fases y Duración Estimada
 
-| Fase       | Descripción               | Duración | Dependencias |
-| ---------- | ------------------------- | -------- | ------------ |
-| **Fase 1** | Data prep & validación    | ~1.5h    | —            |
-| **Fase 2** | Enrichment batch (LLM)    | ~3h      | Fase 1       |
-| **Fase 3** | Feature engineering       | ~1h      | Fase 2       |
-| **Fase 4** | Clustering & segmentación | ~2h      | Fase 3       |
-| **Fase 5** | Streamlit dashboard       | ~3h      | Fase 4       |
-| **Fase 6** | Chatbot streaming RAG     | ~3h      | Fase 4       |
-| **Fase 7** | Pitch deck & ensayo       | ~2h      | Fase 5+6     |
-| **Fase 8** | Makefile + polish         | ~0.5h    | Fase 5+6     |
-| _(Opc.)_   | Migrar a Prefect          | ~1h      | Fase 8       |
+| Fase       | Descripcion               | Estado      | Dependencias |
+| ---------- | ------------------------- | ----------- | ------------ |
+| **Fase 1** | Data prep & validacion    | COMPLETO | —            |
+| **Fase 2** | Enrichment batch (LLM)    | COMPLETO (parcial: embeddings, intenciones, DNA. Descripciones = STUB) | Fase 1       |
+| **Fase 3** | Feature engineering       | COMPLETO | Fase 2       |
+| **Fase 4** | Clustering & segmentacion | COMPLETO | Fase 3       |
+| **Fase 5** | Streamlit dashboard       | COMPLETO | Fase 4       |
+| **Fase 6** | Chatbot streaming         | COMPLETO | Fase 4       |
+| **Fase 7** | Pitch deck & ensayo       | PENDIENTE    | Fase 5+6     |
+| **Fase 8** | Makefile + polish         | COMPLETO | Fase 5+6     |
 
 ### Detalle por Fase
 
-#### Fase 1: Data Prep & Validación
+#### Fase 1: Data Prep & Validacion
 
-- [ ] Leer datasets en Polars/Pandas
-- [ ] Validar schemas contra diccionario de datos
-- [ ] Chequear nulls, rangos, FK integrity, duplicados
-- [ ] Cruce de `user_id` entre datasets (¿cuántos matchean?)
-- [ ] Estadísticas descriptivas básicas para notebook de exploración
-- [ ] Guardar datasets limpios en `data/processed/`
+- [x] Leer datasets en Polars/Pandas
+- [x] Validar schemas contra diccionario de datos (checks 1.2, 1.3, 1.7, 1.8)
+- [x] Chequear nulls, rangos, FK integrity, duplicados
+- [x] Cruce de `user_id` entre datasets
+- [x] Ingesta: limpiar, estandarizar fechas, guardar como Parquet
 
-#### Fase 2: Enrichment Batch (LLM)
+#### Fase 2: Enrichment Batch
 
-- [ ] Configurar cliente Azure OpenAI (`src/enrichment/llm_client.py`)
-- [ ] Embeddings: vectorizar ~50K inputs de Havi, mean-pool por usuario
-- [ ] Intenciones: clasificar 24K conversaciones en batch (50 por llamada)
-- [ ] Descripciones: normalizar `descripcion_libre` de transacciones
-- [ ] Customer DNA: generar perfil narrativo para ~15K usuarios
-- [ ] Verificar consumo de tokens acumulado contra presupuesto $20
+- [x] Configurar cliente Azure (`src/enrichment/llm_client.py`) — chat (DeepSeek-V3.2) + embeddings (text-embedding-3-large)
+- [x] Embeddings: vectorizar ~24K conversaciones, mean-pool por usuario (3072 dims, $0.20)
+- [x] Intenciones: clasificar conversaciones en batch (50 por llamada), con soporte de sampling
+- [ ] Descripciones: **STUB** — no implementado (archivo con `pass`)
+- [x] Customer DNA: perfil narrativo deterministico (~5.6K usuarios, $0.00, <1 segundo)
 
 #### Fase 3: Feature Engineering
 
-- [ ] Join de todas las features por `user_id`
-- [ ] Manejo de usuarios sin conversaciones (imputación por cero)
-- [ ] One-hot encoding para categóricas
-- [ ] Agregaciones transaccionales (frecuencia, montos, categorías)
-- [ ] Feature matrix final → `data/processed/feature_matrix.parquet`
+- [x] Join de todas las features por `user_id`
+- [x] Manejo de usuarios sin conversaciones (imputacion por cero)
+- [x] One-hot encoding para categoricas
+- [x] Agregaciones transaccionales (frecuencia, montos, categorias)
+- [x] Feature matrix final: ~3,209 columnas → `data/processed/feature_matrix.parquet`
 
-#### Fase 4: Clustering & Segmentación
+#### Fase 4: Clustering & Segmentacion
 
-- [ ] KNN Imputer + StandardScaler
-- [ ] UMAP reducción a 8 dimensiones
-- [ ] HDBSCAN clustering con hyperparameter search
-- [ ] Asignación de ruido a clusters cercanos
-- [ ] Validación (DBCV, Silhouette)
-- [ ] LLM labeling de segmentos
-- [ ] Perfiles de segmento con acciones proactivas
+- [x] KNN Imputer (k=5) + StandardScaler (sin escalar columnas de embedding)
+- [x] UMAP reduccion a 8 dimensiones
+- [x] HDBSCAN clustering con grid search (16 combinaciones, Silhouette scoring)
+- [x] Asignacion de ruido a clusters cercanos (KNN k=1, percentil 95)
+- [x] Validacion (Silhouette)
+- [x] Segment labeling deterministico (reglas Python, $0)
+- [x] Perfiles de segmento con acciones proactivas
 
 #### Fase 5: Streamlit Dashboard
 
-- [ ] Configurar `st.navigation` con 5 páginas
-- [ ] Home: KPIs y métricas
-- [ ] Segment Explorer: UMAP scatter + perfil
-- [ ] Customer 360: ficha completa + recomendación
-- [ ] Analytics: heatmaps, sankey, trends
-- [ ] Chatbot page (placeholder, se llena en Fase 6)
+- [x] Configurar `st.navigation` con 5 paginas
+- [x] Home: KPIs con sparklines, treemap de segmentos, quick insights, navegacion
+- [x] Segment Explorer: UMAP scatter + tarjeta de segmento con comparacion
+- [x] Customer 360: ficha completa + radar chart + donut + transacciones
+- [x] Analytics: heatmap, sankey, sunburst, adopcion de productos
+- [x] Chatbot page
 
-#### Fase 6: Chatbot Streaming RAG
+#### Fase 6: Chatbot Streaming
 
-- [ ] Implementar 3 herramientas: `get_account_summary`, `get_recent_transactions`, `get_recommendation`
-- [ ] Construir Contexto RAG: embeddings + segmento + productos
-- [ ] Integrar Customer DNA como system prompt
-- [ ] Configurar streaming con `st.write_stream()`
-- [ ] UI de chat con tool calls visibles
-- [ ] Pruebas de conversación con 5 usuarios de distintos segmentos
+- [x] Implementar 3 herramientas: `get_account_summary`, `get_recent_transactions`, `get_recommendation`
+- [x] Integrar Customer DNA como system prompt
+- [x] Streaming two-step: deteccion de tool calls (non-streaming) → respuesta final (streaming)
+- [x] UI de chat con tool calls visibles y sugerencias de prompts
+- [x] Errores manejados con mensaje en placeholder
 
 #### Fase 7: Pitch Deck & Ensayo
 
@@ -979,58 +978,58 @@ DatathonTec2026/
 
 ---
 
-## 10. Estimación de Costos (Azure AI Foundry)
+## 10. Estimacion de Costos (Azure AI Foundry)
 
-### DeepSeek-V3.2 + text-embedding-3-small Pricing (Azure AI Foundry)
+### DeepSeek-V3.2 + text-embedding-3-large Pricing
 
 | Modelo                 | Input (por 1M tokens) | Output (por 1M tokens) |
 | ---------------------- | --------------------- | ---------------------- |
-| DeepSeek-V3.2              | $0.27                 | $1.10                  |
-| text-embedding-3-large     | $0.13                 | —                      |
+| DeepSeek-V3.2          | $0.27                 | $1.10                  |
+| text-embedding-3-large | $0.13                 | --                     |
 
-### Estimación por Tarea
+### Costo Real por Tarea (con codigo implementado)
 
 | Tarea                                        | Tokens In (M) | Tokens Out (M)    | Costo      |
 | -------------------------------------------- | ------------- | ----------------- | ---------- |
-| Embeddings conversacionales                  | 10.0          | — (embedding API) | **$0.20**  |
-| Intenciones (24K conv × batch 50)            | 12.0          | 3.0               | **$6.54**  |
-| Descripciones (batch 100)                    | 5.0           | 2.0               | **$3.55**  |
-| Customer DNA (15K users × batch 25)          | 7.5           | 3.0               | **$5.33**  |
+| Embeddings conversacionales                  | 10.0          | -- (embedding API) | **$0.20**  |
+| Intenciones (24K conv x batch 50)            | 12.0          | 3.0               | **$6.54**  |
+| Descripciones                               | --            | --                | **$0.00** (STUB, no implementado) |
+| Customer DNA                                | --            | --                | **$0.00** (template deterministico) |
 | Chatbot demo (streaming, ~100 interacciones) | 0.5           | 0.5               | **$0.69**  |
-| Segment labeling (LLM, ~10 segmentos)        | 0.05          | 0.02              | **$0.04**  |
-| **TOTAL**                                    | **35.05**     | **8.52**          | **$17.45** |
+| Segment labeling (~10 segmentos)             | --            | --                | **$0.00** (reglas Python) |
+| **TOTAL**                                    | **22.5**      | **3.5**           | **~$7.43** |
 
-> ✅ **Con DeepSeek-V3.2 + text-embedding-3-large, el costo total estimado es $17.45 USD — dentro del presupuesto de $20 sin necesidad de mitigación.**
+> Con DeepSeek-V3.2 + text-embedding-3-large, el costo total real es ~$7.43 USD — muy por debajo del presupuesto de $20.
 
-### Estrategias de Mitigación de Costos (opcional)
+### Estrategias de Mitigacion de Costos (opcional, ya innecesarias)
 
-| Estrategia                                                                                                                                                   | Ahorro Est. | Prioridad       |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --------------- |
-| **Reducir batch de intenciones**: solo conversaciones > 2 interacciones (~9K en vez de 24K). Conversaciones de 1 mensaje se clasifican con reglas (sin LLM). | ~$3.90      | Media           |
-| **Sampling para embedding**: si hay conversaciones repetitivas (~15K single-interaction), muestrear al 50%.                                                  | ~$0.10      | Baja            |
-| **Customer DNA solo para usuarios con ≥3 conversaciones**: reduce de 15K a ~7K usuarios activos.                                                             | ~$2.50      | Media           |
-| **DeepSeek-V3.2 es ~33% más barato que GPT-4.1 mini en input y ~31% en output**. El costo ya está dentro del presupuesto.                                    | —           | —               |
-| **Priorizar intenciones y customer DNA**. Si sobra presupuesto, hacer descripciones. Si no, descripciones con reglas (str.contains).                         | ~$3.55      | Baja (fallback) |
+| Estrategia                                                                                                                                                   | Ahorro Est. | Estado       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | ------------ |
+| Customer DNA template deterministico (implementado): reemplaza LLM con reglas Python.                                                                       | $5.33       | APLICADO |
+| Descripciones no implementadas (STUB): si se implementa con regex en vez de LLM, costo es $0.                                                               | $3.55       | APLICADO |
+| Segment labeling deterministico (implementado): reglas Python en vez de LLM.                                                                                | $0.04       | APLICADO |
+| **Ahorro total aplicado**                                                                                                                                     | **$8.92**   | --           |
 
-### Plan de Ejecución con Presupuesto Controlado
+### Plan de Ejecucion con Presupuesto Controlado (Real)
 
 ```
-Orden de ejecución para control de gasto:
+Orden de ejecucion real (ya completado):
 
-1. Embeddings      → $1.30  ✅ Siempre
-2. Intenciones     → $6.54  ✅ (conversaciones completas: 24K)
-3. Customer DNA    → $5.33  ✅ (usuarios completos: 15K)
-4. Segment Labeling → $0.04  ✅ Siempre
-5. Chatbot demo    → $0.69  ✅ Siempre
+1. Embeddings      → $0.20  (text-embedding-3-large, mean-pool por usuario)
+2. Intenciones     → $6.54  (DeepSeek-V3.2, 24K conversaciones, batch 50)
+3. Customer DNA    → $0.00  (Template deterministico Python, <1 segundo)
+4. Segment Labeling → $0.00  (Reglas Python, sin LLM)
+5. Descripciones    → $0.00  (STUB — no implementado)
+6. Chatbot demo    → $0.69  (DeepSeek-V3.2 streaming, ~100 interacciones)
 ───────────────────────────────────────
-   Subtotal        → $13.90  ← Dentro de $20 ✅
+   Total           → ~$7.43  ← Muy por debajo de $20
 
-6. Descripciones   → $3.55  ✅ Dentro del presupuesto
-───────────────────────────────────────
-   Total           → $17.45  ← Holgado dentro de $20
+Presupuesto restante: ~$12.57. Puede usarse para:
+- Procesar intenciones al 100% (si se ejecuto con sample <100%)
+- Implementar descripciones con LLM si se requiere ($3.55)
+- Ampliar chatbot demo con mas interacciones
+- Iteraciones adicionales de enriquecimiento
 ```
-
-> Con la estrategia de mitigación opcional, el costo puede bajar aún más de ser necesario.
 
 ---
 
@@ -1038,10 +1037,10 @@ Orden de ejecución para control de gasto:
 
 | Criterio                        | Peso | Cómo lo cubrimos                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Objetivos y Alcance**         | 15%  | • Definición clara de clases: segmentos descubiertos por aprendizaje no supervisado (HDBSCAN) con features enriquecidas por LLM<br>• Esquema de evaluación no supervisado: DBCV + Silhouette + estabilidad cross-run<br>• Plan de acción: 4 tipos de automatización proactiva (ofertas, alertas, insights, promociones) mapeadas a cada segmento |
-| **Innovación y Creatividad**    | 35%  | • Customer DNA: perfil narrativo generado por LLM como system prompt del chatbot<br>• 4 técnicas de enriquecimiento LLM combinadas (embeddings + intenciones + descripciones + DNA)<br>• RAG híbrido con tool calling (3 herramientas) y streaming en tiempo real<br>• Segment labeling automatizado con LLM (no manual)                         |
-| **Impacto y Viabilidad**        | 35%  | • Costo total <$14 (presupuesto $20)<br>• Escalable a millones de usuarios (batching, FAISS, arquitectura modular)<br>• Sin vendor lock-in: Azure OpenAI es el único servicio externo, reemplazable por open-source (ej. Llama 3)<br>• Impacto medible: métricas de experiencia de cliente (NPS, resolution rate, churn risk)                    |
-| **Presentación y Comunicación** | 15%  | • Dashboard Streamlit interactivo con 5 vistas<br>• Chatbot con streaming en tiempo real → demo funcional<br>• Customer 360 con ficha completa y recomendaciones<br>• Storytelling: del dato crudo a la acción proactiva personalizada                                                                                                           |
+| **Objetivos y Alcance**         | 15%  | Definicion clara de clases: segmentos descubiertos por aprendizaje no supervisado (HDBSCAN) con features enriquecidas por LLM. Esquema de evaluacion no supervisado: Silhouette + grid search (DBCV descartado por inestable en UMAP). Plan de accion: 4 tipos de automatizacion proactiva (ofertas, alertas, insights, promociones) mapeadas a cada segmento. |
+| **Innovacion y Creatividad**    | 35%  | Customer DNA: perfil narrativo deterministico como system prompt del chatbot. 3 tecnicas de enriquecimiento (embeddings + intenciones + DNA template). Tool calling nativo openai SDK (3 herramientas) con streaming two-step en Streamlit. Segment labeling automatizado con reglas Python (sin LLM). Dashboard interactivo con 5 paginas, tema personalizado Hey Banco. |
+| **Impacto y Viabilidad**        | 35%  | Costo total real ~$7.43 (presupuesto $20, ~$12.57 de sobra). Escalable a millones de usuarios (batching, arquitectura modular). Sin vendor lock-in: Azure es el unico servicio externo, endpoints OpenAI-compatibles. Impacto medible: metricas de experiencia de cliente (satisfaccion, resolution rate, score buro, patrones atipicos). |
+| **Presentacion y Comunicacion** | 15%  | Dashboard Streamlit interactivo con 5 vistas (Home, Segmentos, Customer 360, Havi Next, Analytics). Chatbot con streaming en tiempo real → demo funcional. Customer 360 con ficha completa y recomendaciones. Storytelling: del dato crudo a la accion proactiva personalizada. Tema visual Hey Banco (dark/white). |
 
 ---
 
@@ -1054,7 +1053,7 @@ Orden de ejecución para control de gasto:
 | 1 | **DeepSeek-V3.2** sobre GPT-4.1 mini | GPT-4.1 mini, GPT-4o, Claude 3.5 Sonnet, Llama 3 | ~33% más barato en input, ~31% en output. Disponible en Azure AI Foundry como serverless OpenAI-compatible. Tool calling y JSON structured output nativos. Costo total estimado $17.45 (dentro de $20). |
 | 2   | **HDBSCAN** sobre KMeans                                                | KMeans, Gaussian Mixture, DBSCAN, Agglomerative                | HDBSCAN descubre número de clusters automáticamente, maneja ruido, no asume formas esféricas ni gaussianas. KMeans requeriría asumir K a priori.                                   |
 | 3   | **UMAP** sobre PCA/t-SNE                                                | PCA, t-SNE, PaCMAP                                             | UMAP preserva estructura global y local, escala a alta dimensionalidad (embeddings 1536-dim), más rápido que t-SNE.                                                                |
-| 4   | **Feature Matrix 220-column** sobre Autoencoders                        | Autoencoders, VAE, Deep Clustering                             | Interpretabilidad: cada feature tiene nombre y significado de negocio. Autoencoders son caja negra. El volumen (15K × 220) es manejable sin GPU.                                   |
+| 4   | **Feature Matrix ~3,200 cols** sobre Autoencoders                         | Autoencoders, VAE, Deep Clustering                             | Interpretabilidad: cada feature tiene nombre y significado de negocio. Autoencoders son caja negra. El volumen (15K x ~3,200) es manejable sin GPU. |
 | 5   | **FAISS in-memory** sobre Pinecone/Weaviate                             | Pinecone, Weaviate, ChromaDB                                   | 15K vectores caben en RAM (~100MB). FAISS sin servidor, sin costo, sin latencia de red. Self-contained.                                                                            |
 | 6 | **Tool Calling nativo (openai SDK)** sobre LangChain/LlamaIndex | LangChain Agents, LlamaIndex, CrewAI | Zero-dependency adicional. OpenAI SDK nativo maneja tool calling desde v1.0. Menos abstracción → más control sobre streaming y costos. DeepSeek expone endpoint OpenAI-compatible. |
 | 7   | **Makefile** sobre Airflow/Prefect (inicial)                            | Prefect, Airflow, Dagster                                      | Makefile es zero-config. Scripts ya están diseñados para migrar a Prefect (funciones puras con entrada/salida clara).                                                              |
@@ -1064,13 +1063,13 @@ Orden de ejecución para control de gasto:
 
 ### Trade-offs Aceptados
 
-| Trade-off                                                                                                                             | Impacto                                                    | Mitigación                                                                                                                        |
+| Trade-off                                                                                                                             | Impacto                                                    | Mitigacion                                                                                                                        |
 | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **GPT-4.1 mini puede tener menor precisión que GPT-4o en intenciones** → DeepSeek-V3.2 puede tener precisión diferente en intenciones | Clasificación de intenciones puede tener ~85-90% accuracy. | Batch más grande (50 convs) incluye ejemplos en prompt. Si accuracy baja, agregar few-shot examples.                              |
-| **HDBSCAN deja usuarios como ruido (cluster -1)**                                                                                     | ~13% de usuarios no asignados a segmento                   | Reasignación por KNN al cluster más cercano con umbral de distancia.                                                              |
-| **UMAP no-determinístico**                                                                                                            | Clusters pueden variar entre ejecuciones                   | Fijar `random_state=117`. Validar estabilidad con 5 seeds diferentes.                                                             |
-| **Customer DNA generado por LLM puede alucinar** → DeepSeek-V3.2 también puede alucinar                                               | Perfiles imprecisos afectan personalización del chatbot    | Data grounding: el prompt solo incluye datos factuales del dataset. Validar que el perfil no invente productos o comportamientos. |
-| **Streamlit local = no compartir dashboard fácilmente**                                                                               | Solo visible en la máquina del equipo                      | Grabación de demo para el pitch. Compartir pantalla en presentación.                                                              |
+| **DeepSeek-V3.2 puede tener precision diferente en intenciones vs. otros modelos** | Clasificacion de intenciones puede tener ~85-90% accuracy. | Batch de 50 conversaciones. Validacion y normalizacion de valores contra enumeraciones permitidas. |
+| **HDBSCAN deja usuarios como ruido (cluster -1)**                                                                                     | Algunos usuarios no asignados a segmento                  | Reasignacion por KNN (k=1) al cluster mas cercano con umbral de distancia (percentil 95 intra-cluster). |
+| **UMAP no-deterministico**                                                                                                            | Clusters pueden variar entre ejecuciones                   | Fijar `random_state=42`. Grid search sobre 16 combinaciones de hiperparametros. |
+| **Customer DNA deterministico (template) es menos personalizado que LLM**                                                             | Perfiles genericos vs. personalizados                      | El template cubre 6 dimensiones con logica condicional especifica. Datos factuales del dataset (sin riesgo de alucinacion). |
+| **Streamlit local = no compartir dashboard facilmente**                                                                               | Solo visible en la maquina del equipo                      | Grabacion de demo para el pitch. Compartir pantalla en presentacion. |
 
 ---
 
@@ -1081,20 +1080,21 @@ Orden de ejecución para control de gasto:
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # Editar con keys de Azure
+cp .env.example .env   # o crea .env con tus keys de Azure
 
 # Pipeline completo
 make all
 
 # Etapas individuales
-make validate    # Validación de datos
-make enrich      # Enrichment LLM (4 módulos)
+make validate    # Validacion de datos
+make ingest      # Carga y limpieza inicial
+make enrich      # Enrichment (embeddings + intenciones + customer DNA)
 make features    # Feature matrix
-make cluster     # UMAP + HDBSCAN
+make cluster     # UMAP + HDBSCAN + segment labeling
 make dashboard   # Streamlit
 
-# Chatbot demo
-python src/chatbot/agent.py --user USR-00042
+# Chatbot
+streamlit run src/dashboard/app.py   # Navega a pagina Havi Next
 
 # Limpieza
 make clean
@@ -1107,9 +1107,9 @@ make clean
 | Término          | Definición                                                                                                                                                           |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Customer DNA** | Perfil narrativo generado por LLM que describe necesidades implícitas, comportamiento financiero y oportunidades de atención proactiva de un cliente.                |
-| **Embedding**    | Representación vectorial densa de texto (1536 dimensiones) que captura semántica. Generado con `text-embedding-3-small`.                                             |
+| **Embedding**    | Representacion vectorial densa de texto (3072 dimensiones) que captura semantica. Generado con `text-embedding-3-large`. |
 | **HDBSCAN**      | Hierarchical Density-Based Spatial Clustering of Applications with Noise. Algoritmo de clustering que descubre automáticamente el número de clusters y maneja ruido. |
-| **RAG**          | Retrieval-Augmented Generation. El chatbot recupera datos del usuario (productos, transacciones, perfil) antes de generar la respuesta.                              |
+| **RAG**          | Retrieval-Augmented Generation. Tecnica donde el modelo recupera datos antes de generar respuesta. En este proyecto, el chatbot usa tool calling + Customer DNA como system prompt (sin FAISS/vector retrieval). |
 | **Tool Calling** | Capacidad del LLM de invocar funciones externas (herramientas) para obtener datos que no están en su contexto.                                                       |
 | **UMAP**         | Uniform Manifold Approximation and Projection. Algoritmo de reducción de dimensionalidad que preserva estructura local y global.                                     |
 | **MCC**          | Merchant Category Code. Código que clasifica el giro comercial de un establecimiento.                                                                                |

@@ -75,6 +75,7 @@ def chat_with_tools(
         for chunk_text in chat_completion_stream(
             messages=messages,
             temperature=0.5,
+            max_tokens=512,
         ):
             yield {"type": "text", "content": chunk_text}
 

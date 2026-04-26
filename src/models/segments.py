@@ -128,7 +128,7 @@ def _label_segment(
     # --- Descripcion ---
     desc = (
         f"Segmento de {size:,} clientes ({pct:.1f}%) mayoritariamente {genero_str}, "
-        f"edad promedio {edad:.0f} anos, ingreso mensual promedio ${ingreso:,.0f} MXN. "
+        f"edad promedio {edad:.0f} años, ingreso mensual promedio ${ingreso:,.0f} MXN. "
         f"Score buro promedio {score_avg:.0f}, satisfaccion {sat_avg:.1f}/10. "
         f"{hey_pro_pct:.0f}% son Hey Pro. "
         f"Antiguedad promedio {antiguedad:.0f} dias. "

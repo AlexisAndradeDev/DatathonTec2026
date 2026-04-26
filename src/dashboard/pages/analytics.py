@@ -26,7 +26,7 @@ def run_analytics() -> None:
     with m1:
         st.metric("Transacciones", f"{tx.shape[0]:,}", border=True)
     with m2:
-        st.metric("Volumen Total", f"${tx['monto'].sum():,.0f}", border=True)
+        st.metric("Volumen Total", f"${tx['monto'].sum()/1000000:,.2f} M", border=True)
     with m3:
         st.metric("Interacciones Havi", f"{havi.shape[0]:,}", border=True)
     with m4:
