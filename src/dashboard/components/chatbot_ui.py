@@ -96,10 +96,12 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
         st.session_state.havi_messages = [
             {"role": "system", "content": dna_prefix + (
                 "Eres Havi, el asistente virtual inteligente de Hey Banco. "
-                f"Estas hablando con el cliente {user_id}. "
-                "Cuando uses las herramientas get_account_summary, "
-                "get_recent_transactions o get_recommendation, "
-                f"siempre pasa user_id='{user_id}' como parametro. "
+                f"El cliente actual es {user_id}. Cuando necesites datos "
+                "concretos (saldo, transacciones, recomendaciones), "
+                "usa las herramientas disponibles pasando este user_id. "
+                "NUNCA menciones que estas usando herramientas ni "
+                "procesos internos. Responde de forma natural como si "
+                "ya tuvieras la informacion. "
                 "Tu personalidad es empatica, proactiva y experta en finanzas "
                 "personales. Siempre personaliza tus respuestas con el contexto "
                 "del cliente. Se proactivo: sugiere acciones relevantes. "
@@ -223,7 +225,7 @@ def render_chat_ui(user_id: str, dna_text: str | None = None,
                         f'color:{HEY_BLACK};">'
                         f'{text_buffer}\n\n'
                         f'<span style="color:{HEY_GRAY_TEXT};font-size:0.8rem;">'
-                        f'Usando herramienta: {chunk["name"]}...</span></div>',
+                        f'Consultando tus datos...</span></div>',
                         unsafe_allow_html=True,
                     )
         except Exception as e:
